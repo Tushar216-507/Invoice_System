@@ -2872,17 +2872,195 @@ def delete_invoice(id):
 @app.route('/manage_vendors', methods=['GET'])
 @login_required
 def manage_vendors():
-    """Display all vendors - no direct creation, only through approval"""
+    """Department landing or filtered vendor kanban depending on query param"""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Fetch all vendors
-    cursor.execute('SELECT * FROM vendors WHERE deleted_at IS NULL ORDER BY vendor_name')
-    vendors = cursor.fetchall()
-    conn.close()
+    user_role = current_user.role
+    user_department = current_user.department
 
-    return render_template('manage_vendors.html', vendors=vendors)
+    selected_dept = request.args.get('department', '').strip()
 
+    # Non-superadmin always goes straight to their own department
+    if user_role != 'superadmin':
+        selected_dept = user_department
+
+    if selected_dept:
+        # Vendor kanban view — filtered by department
+        cursor.execute(
+            'SELECT * FROM vendors WHERE deleted_at IS NULL AND department = %s ORDER BY vendor_name',
+            (selected_dept,)
+        )
+        vendors = cursor.fetchall()
+        conn.close()
+        return render_template('manage_vendors.html',
+                               vendors=vendors,
+                               selected_department=selected_dept,
+                               departments=None)
+    else:
+        # Department landing view — superadmin only
+        cursor.execute('''
+            SELECT
+                COALESCE(department, 'Unassigned') as department,
+                COUNT(*) as total,
+                SUM(CASE WHEN vendor_status = 'Active' THEN 1 ELSE 0 END) as active_count,
+                SUM(CASE WHEN vendor_status = 'Inactive' THEN 1 ELSE 0 END) as inactive_count
+            FROM vendors
+            WHERE deleted_at IS NULL
+            GROUP BY COALESCE(department, 'Unassigned')
+            ORDER BY department
+        ''')
+        departments = cursor.fetchall()
+        conn.close()
+        return render_template('manage_vendors.html',
+                               vendors=None,
+                               selected_department=None,
+                               departments=departments)
+
+# ============= VENDOR BULK IMPORT ROUTES (superadmin only) =============
+
+@app.route('/vendor/import/template')
+@superadmin_required
+def vendor_import_template():
+    """Return a downloadable Excel template for vendor bulk import"""
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Vendors"
+    headers = ['vendor_name', 'vendor_address', 'PAN', 'GSTIN', 'POC', 'POC_number', 'POC_email', 'description']
+    ws.append(headers)
+    # Sample row so user knows the format
+    ws.append(['Example Vendor Pvt Ltd', '123 MG Road, Mumbai 400001', 'ABCDE1234F', '27ABCDE1234F1Z5', 'John Doe', '9876543210', 'john@example.com', 'Sample description'])
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='vendor_import_template.xlsx'
+    )
+
+
+@app.route('/vendor/import/preview', methods=['POST'])
+@superadmin_required
+def vendor_import_preview():
+    """Parse uploaded file, validate rows, return valid + error lists"""
+    try:
+        file = request.files.get('file')
+        department = request.form.get('department', '').strip()
+
+        if not file:
+            return jsonify({'success': False, 'message': 'No file uploaded'})
+        if not department:
+            return jsonify({'success': False, 'message': 'Department is required'})
+
+        filename = file.filename.lower()
+        if filename.endswith('.csv'):
+            df = pd.read_csv(file)
+        elif filename.endswith(('.xlsx', '.xls')):
+            df = pd.read_excel(file)
+        else:
+            return jsonify({'success': False, 'message': 'Only .xlsx or .csv files are supported'})
+
+        # Normalise column names
+        df.columns = [c.strip().lower() for c in df.columns]
+
+        if 'vendor_name' not in df.columns or 'vendor_address' not in df.columns:
+            return jsonify({'success': False, 'message': 'File must have vendor_name and vendor_address columns'})
+
+        # Fetch existing vendor names from DB to catch duplicates
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT LOWER(vendor_name) FROM vendors WHERE deleted_at IS NULL")
+        existing = {row[0] for row in cursor.fetchall()}
+        conn.close()
+
+        valid, errors = [], []
+        def clean(row, val):
+            v = str(row.get(val, '')).strip()
+            return None if (not v or v.lower() == 'nan') else v
+        
+        for i, row in df.iterrows():
+            row_num = i + 2  # +2 because row 1 is header, pandas is 0-indexed
+            vendor_name = str(row.get('vendor_name', '')).strip()
+            vendor_address = str(row.get('vendor_address', '')).strip()
+
+            # Validate required fields
+            if not vendor_name or vendor_name.lower() == 'nan':
+                errors.append({'row': row_num, 'vendor_name': '', 'vendor_address': vendor_address, 'reason': 'vendor_name is required'})
+                continue
+            if not vendor_address or vendor_address.lower() == 'nan':
+                errors.append({'row': row_num, 'vendor_name': vendor_name, 'vendor_address': '', 'reason': 'vendor_address is required'})
+                continue
+            if vendor_name.lower() in existing:
+                errors.append({'row': row_num, 'vendor_name': vendor_name, 'vendor_address': vendor_address, 'reason': 'Vendor already exists'})
+                continue
+
+            valid.append({
+                'row': row_num,
+                'vendor_name': vendor_name,
+                'vendor_address': vendor_address,
+                'department': department,   # always from the UI input
+                'pan': clean(row,'pan'),
+                'gstin': clean(row,'gstin'),
+                'poc': clean(row,'poc'),
+                'poc_number': clean(row,'poc_number'),
+                'poc_email': clean(row,'poc_email'),
+                'description': clean(row,'description'),
+                'shortform': generate_shortform(vendor_name)
+            })
+
+        return jsonify({'success': True, 'valid': valid, 'errors': errors})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/vendor/import/confirm', methods=['POST'])
+@superadmin_required
+def vendor_import_confirm():
+    """Bulk insert validated vendor rows into the vendors table"""
+    try:
+        data = request.get_json()
+        rows = data.get('rows', [])
+
+        if not rows:
+            return jsonify({'success': False, 'message': 'No rows to import'})
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        imported = 0
+        for row in rows:
+            cursor.execute("""
+                INSERT INTO vendors
+                (vendor_name, vendor_status, department, description, shortforms_of_vendors,
+                 vendor_address, PAN, GSTIN, POC, POC_number, POC_email)
+                VALUES (%s, 'Active', %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                row['vendor_name'],
+                row['department'],
+                row.get('description'),
+                row['shortform'],
+                row['vendor_address'],
+                row.get('pan'),
+                row.get('gstin'),
+                row.get('poc'),
+                row.get('poc_number'),
+                row.get('poc_email')
+            ))
+            imported += 1
+
+        conn.commit()
+        conn.close()
+
+        log_activity(f"{current_user.name}({current_user.role}) bulk imported {imported} vendors into department '{rows[0]['department']}'")
+
+        return jsonify({'success': True, 'imported': imported})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/edit_vendor/<int:id>', methods=['POST'])
 @superadmin_required

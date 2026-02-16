@@ -219,17 +219,151 @@
     .btn-group .btn {
         margin-left: -1px;
     }
+
+    /* ── Department grid ── */
+    .dept-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 28px;
+        padding: 10px 0;
+    }
+
+    .dept-card {
+        flex: 0 0 240px;
+        position: relative;
+        background: #f5f0e8;
+        border-radius: 20px;
+        padding: 28px 24px 24px;
+        text-decoration: none;
+        color: inherit;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.10);
+        transition: all 0.28s ease;
+        overflow: hidden;
+        cursor: pointer;
+        border: 1.5px solid rgba(0,0,0,0.07);
+    }
+
+    /* Colour themes per card */
+    .dept-card:nth-child(6n+1) { background: #f5f0e8; }
+    .dept-card:nth-child(6n+2) { background: #eaf0e8; }
+    .dept-card:nth-child(6n+3) { background: #e8edf5; }
+    .dept-card:nth-child(6n+4) { background: #f5e8ee; }
+    .dept-card:nth-child(6n+5) { background: #f0ebe0; }
+    .dept-card:nth-child(6n+6) { background: #e8f5f0; }
+
+    /* Decorative leaf/blob top-right */
+    .dept-card::before {
+        content: '';
+        position: absolute;
+        top: -18px;
+        right: -18px;
+        width: 90px;
+        height: 90px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.045);
+        pointer-events: none;
+    }
+
+    .dept-card::after {
+        content: '';
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.03);
+        pointer-events: none;
+    }
+
+    .dept-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 28px rgba(0,0,0,0.14);
+    }
+
+    /* Icon circle */
+    .dept-icon-wrap {
+        width: 52px;
+        height: 52px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.08);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin-bottom: 14px;
+    }
+
+    .dept-name {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1a1a1a;
+        margin-bottom: 16px;
+        letter-spacing: -0.01em;
+    }
+
+    /* Stat rows */
+    .dept-stat-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 9px;
+    }
+
+    .dept-stat-label {
+        font-size: 0.78rem;
+        color: #555;
+        white-space: nowrap;
+        min-width: 68px;
+        font-weight: 500;
+    }
+
+    .dept-stat-bar-wrap {
+        flex: 1;
+        height: 6px;
+        background: rgba(0,0,0,0.10);
+        border-radius: 99px;
+        overflow: hidden;
+    }
+
+    .dept-stat-bar {
+        height: 100%;
+        border-radius: 99px;
+        background: rgba(0,0,0,0.30);
+        transition: width 0.5s ease;
+    }
+
+    .dept-stat-value {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #333;
+        white-space: nowrap;
+    }
 </style>
 
 <div class="container-fluid" style="max-width: 1400px;">
     <div class="top-header">
-        <h2>Manage Vendors</h2>
-        <button class="add-card-btn" data-bs-toggle="modal" data-bs-target="#addVendorModal">
-            + Add Vendor
-        </button>
+      {% if selected_department %}
+          <div class="d-flex align-items-center gap-3">
+              <a href="/manage_vendors" class="btn btn-outline-secondary btn-sm">← Departments</a>
+              <h2 class="mb-0">{{ selected_department }} — Vendors</h2>
+          </div>
+          <div class="d-flex gap-2">
+              {% if current_user.role == 'superadmin' %}
+              <button class="add-card-btn" style="background-color:#5a8f69;" data-bs-toggle="modal" data-bs-target="#importVendorModal">
+                  ⬆ Import Data
+              </button>
+              {% endif %}
+              <button class="add-card-btn" data-bs-toggle="modal" data-bs-target="#addVendorModal">
+                  + Add Vendor
+              </button>
+          </div>
+      {% else %}
+          <h2>Manage Vendors</h2>
+      {% endif %}
     </div>
     <div class="toast-container" id="toastContainer"></div>
-
+    {% if selected_department %}
     <div class="kanban-container">
 <!-- Active Column -->
 <div class="kanban-column active-col">
@@ -741,6 +875,40 @@
 
 </div>
 <!-- Close kanban-container -->
+    {% else %}
+    <!-- Department landing grid -->
+    <div class="dept-grid">
+        {% for dept in departments %}
+        <a href="/manage_vendors?department={{ dept.department }}" class="dept-card">
+            <div class="dept-icon-wrap">
+              <img  src="{{ url_for('static', filename='images/puzzle.png') }}" 
+                width="26" height="26" 
+                style="opacity:0.7; filter: grayscale(30%);"
+                alt="department">
+            </div>
+            <div class="dept-name">{{ dept.department }}</div>
+
+            <!-- Active bar -->
+            <div class="dept-stat-row">
+                <span class="dept-stat-label">Active</span>
+                <div class="dept-stat-bar-wrap">
+                    <div class="dept-stat-bar" style="width: {{ ((dept.active_count / dept.total) * 100) | int if dept.total > 0 else 0 }}%"></div>
+                </div>
+                <span class="dept-stat-value">{{ dept.active_count }}</span>
+            </div>
+
+            <!-- Total bar -->
+            <div class="dept-stat-row">
+                <span class="dept-stat-label">Total</span>
+                <div class="dept-stat-bar-wrap">
+                    <div class="dept-stat-bar" style="width: 100%"></div>
+                </div>
+                <span class="dept-stat-value">{{ dept.total }}</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
 <!-- Add Vendor Modal -->
 <div class="modal fade" id="addVendorModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
@@ -805,7 +973,66 @@
   </div>
 </div>
 </div>
+<!-- Import Vendor Modal -->
+<div class="modal fade" id="importVendorModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5>Import Vendor Data</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
 
+        <!-- Step 1: Upload -->
+        <div id="importStep1">
+          <p class="text-muted mb-3">
+            Upload an Excel or CSV file. Required columns: <strong>vendor_name</strong>, <strong>vendor_address</strong>. All other columns are optional.
+          </p>
+          <a href="/vendor/import/template" class="btn btn-outline-secondary btn-sm mb-3">⬇ Download Template</a>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Department <span class="text-danger">*</span></label>
+            <input type="text" id="importDepartment" class="form-control" value="{{ selected_department or '' }}" placeholder="e.g. Finance, IT, HR — all imported vendors will be mapped to this department">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Select File (.xlsx or .csv)</label>
+            <input type="file" id="importFile" class="form-control" accept=".xlsx,.csv">
+          </div>
+
+          <button class="btn btn-primary w-100" onclick="previewImport()">Upload & Preview</button>
+        </div>
+
+        <!-- Step 2: Preview -->
+        <div id="importStep2" style="display:none;">
+          <div id="importSummary" class="alert mb-3"></div>
+          <p class="text-muted small mb-2">Department: <strong id="importDeptLabel"></strong></p>
+          <div style="max-height:350px; overflow-y:auto;">
+            <table class="table table-sm table-bordered" id="importPreviewTable">
+              <thead class="table-light">
+                <tr>
+                  <th>Row</th>
+                  <th>Vendor Name</th>
+                  <th>Vendor Address</th>
+                  <th>PAN</th>
+                  <th>GSTIN</th>
+                  <th>POC</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="importPreviewBody"></tbody>
+            </table>
+          </div>
+          <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-secondary w-50" onclick="resetImport()">← Back</button>
+            <button class="btn btn-success w-50" id="confirmImportBtn" onclick="confirmImport()">✔ Confirm Import</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
 <script>
 // Toast notification function
 function showToast(message, type = 'success') {
@@ -961,6 +1188,109 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+// ---- VENDOR IMPORT ----
+let validImportRows = [];
+
+function previewImport() {
+    const file = document.getElementById('importFile').files[0];
+    const department = document.getElementById('importDepartment').value.trim();
+
+    if (!department) { showToast('Please enter a department before uploading.', 'error'); return; }
+    if (!file) { showToast('Please select a file first.', 'error'); return; }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('department', department);
+
+    fetch('/vendor/import/preview', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token() }}' },
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) { showToast(data.message, 'error'); return; }
+
+        validImportRows = data.valid;
+
+        const tbody = document.getElementById('importPreviewBody');
+        tbody.innerHTML = '';
+
+        data.valid.forEach(row => {
+            tbody.innerHTML += `<tr>
+                <td>${row.row}</td>
+                <td>${row.vendor_name}</td>
+                <td>${row.vendor_address}</td>
+                <td>${row.pan || '-'}</td>
+                <td>${row.gstin || '-'}</td>
+                <td>${row.poc || '-'}</td>
+                <td><span class="badge bg-success">Valid</span></td>
+            </tr>`;
+        });
+
+        data.errors.forEach(row => {
+            tbody.innerHTML += `<tr class="table-danger">
+                <td>${row.row}</td>
+                <td>${row.vendor_name || ''}</td>
+                <td>${row.vendor_address || ''}</td>
+                <td colspan="3"></td>
+                <td><span class="badge bg-danger">⚠ ${row.reason}</span></td>
+            </tr>`;
+        });
+
+        document.getElementById('importDeptLabel').textContent = department;
+
+        const summary = document.getElementById('importSummary');
+        summary.className = 'alert ' + (data.valid.length > 0 ? 'alert-success' : 'alert-warning');
+        summary.innerHTML = `<strong>${data.valid.length}</strong> valid rows ready to import. <strong>${data.errors.length}</strong> rows will be skipped.`;
+
+        document.getElementById('confirmImportBtn').disabled = data.valid.length === 0;
+        document.getElementById('importStep1').style.display = 'none';
+        document.getElementById('importStep2').style.display = 'block';
+    })
+    .catch(() => showToast('Error reading file.', 'error'));
+}
+
+function confirmImport() {
+    const btn = document.getElementById('confirmImportBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Importing...';
+
+    fetch('/vendor/import/confirm', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({ rows: validImportRows })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('importVendorModal')).hide();
+            showToast(`${data.imported} vendors imported successfully!`, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast('Import failed: ' + data.message, 'error');
+            btn.disabled = false;
+            btn.innerHTML = '✔ Confirm Import';
+        }
+    })
+    .catch(() => {
+        showToast('Import error.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '✔ Confirm Import';
+    });
+}
+
+function resetImport() {
+    validImportRows = [];
+    document.getElementById('importFile').value = '';
+    document.getElementById('importDepartment').value = '';
+    document.getElementById('importPreviewBody').innerHTML = '';
+    document.getElementById('importStep1').style.display = 'block';
+    document.getElementById('importStep2').style.display = 'none';
+}
 </script>
 
 {% endblock %}
