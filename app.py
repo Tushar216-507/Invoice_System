@@ -2899,16 +2899,17 @@ def manage_vendors():
                                departments=None)
     else:
         # Department landing view — superadmin only
+        # Fetch all departments from departments table + join vendor counts
         cursor.execute('''
             SELECT
-                COALESCE(department, 'Unassigned') as department,
-                COUNT(*) as total,
-                SUM(CASE WHEN vendor_status = 'Active' THEN 1 ELSE 0 END) as active_count,
-                SUM(CASE WHEN vendor_status = 'Inactive' THEN 1 ELSE 0 END) as inactive_count
-            FROM vendors
-            WHERE deleted_at IS NULL
-            GROUP BY COALESCE(department, 'Unassigned')
-            ORDER BY department
+                d.department_name AS department,
+                COUNT(CASE WHEN v.deleted_at IS NULL THEN 1 END) AS total,
+                SUM(CASE WHEN v.vendor_status = 'Active' AND v.deleted_at IS NULL THEN 1 ELSE 0 END) AS active_count,
+                SUM(CASE WHEN v.vendor_status = 'Inactive' AND v.deleted_at IS NULL THEN 1 ELSE 0 END) AS inactive_count
+            FROM departments d
+            LEFT JOIN vendors v ON v.department = d.department_name
+            GROUP BY d.id, d.department_name
+            ORDER BY d.department_name
         ''')
         departments = cursor.fetchall()
         conn.close()
@@ -2917,11 +2918,11 @@ def manage_vendors():
                                selected_department=None,
                                departments=departments)
 
-# ============== Department additon (superadmin only) ==================
+# ============== Department addition (superadmin only) ==================
 @app.route('/vendor/add_department', methods=['POST'])
 @superadmin_required
 def add_department():
-    """Create a new empty department"""
+    """Create a new department in the departments table"""
     dept_name = request.form.get('dept_name', '').strip()
     if not dept_name:
         flash('Department name is required.', 'error')
@@ -2931,28 +2932,22 @@ def add_department():
     cursor = conn.cursor(dictionary=True)
 
     # Check if department already exists
-    cursor.execute('SELECT department FROM vendors WHERE department = %s LIMIT 1', (dept_name,))
+    cursor.execute('SELECT id FROM departments WHERE department_name = %s', (dept_name,))
     existing = cursor.fetchone()
-    conn.close()
 
     if existing:
+        conn.close()
         flash(f'Department "{dept_name}" already exists.', 'error')
         return redirect(url_for('manage_vendors'))
 
-    # Insert a placeholder vendor so the dept shows up in the grid
-    # It is invisible (deleted_at set) — just anchors the department name
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        '''INSERT INTO vendors (vendor_name, department, vendor_status, deleted_at)
-           VALUES (%s, %s, 'Inactive', NOW())''',
-        (f'__placeholder_{dept_name}__', dept_name)
-    )
+    # Insert into departments table
+    cursor.execute('INSERT INTO departments (department_name) VALUES (%s)', (dept_name,))
     conn.commit()
     conn.close()
 
     flash(f'Department "{dept_name}" created successfully!', 'success')
     return redirect(url_for('manage_vendors'))
+
 # ============= VENDOR BULK IMPORT ROUTES (superadmin only) =============
 @app.route('/vendor/import/template')
 @superadmin_required
