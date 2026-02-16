@@ -229,7 +229,7 @@
     }
 
     .dept-card {
-        flex: 0 0 240px;
+        flex: 0 0 320px;
         position: relative;
         background: #f5f0e8;
         border-radius: 20px;
@@ -295,7 +295,7 @@
     }
 
     .dept-name {
-        font-size: 1.2rem;
+        font-size: 1.45rem;
         font-weight: 700;
         color: #1a1a1a;
         margin-bottom: 16px;
@@ -311,7 +311,7 @@
     }
 
     .dept-stat-label {
-        font-size: 0.78rem;
+        font-size: 0.95rem;
         color: #555;
         white-space: nowrap;
         min-width: 68px;
@@ -334,10 +334,30 @@
     }
 
     .dept-stat-value {
-        font-size: 0.78rem;
+        font-size: 0.95rem;
         font-weight: 600;
         color: #333;
         white-space: nowrap;
+    }
+    .back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        text-decoration: none;
+        color: #666;
+        font-size: 0.9rem;
+        font-weight: 500;
+        padding: 7px 14px;
+        border-radius: 8px;
+        background: #f0f0f0;
+        border: 1.5px solid #ddd;
+        transition: all 0.2s;
+    }
+
+    .back-btn:hover {
+        background: #e4e4e4;
+        color: #333;
+        border-color: #ccc;
     }
 </style>
 
@@ -345,7 +365,7 @@
     <div class="top-header">
       {% if selected_department %}
           <div class="d-flex align-items-center gap-3">
-              <a href="/manage_vendors" class="btn btn-outline-secondary btn-sm">← Departments</a>
+              <a href="/manage_vendors" class="back-btn">← Departments</a>
               <h2 class="mb-0">{{ selected_department }} — Vendors</h2>
           </div>
           <div class="d-flex gap-2">
@@ -882,7 +902,7 @@
         <a href="/manage_vendors?department={{ dept.department }}" class="dept-card">
             <div class="dept-icon-wrap">
               <img  src="{{ url_for('static', filename='images/puzzle.png') }}" 
-                width="26" height="26" 
+                width="36" height="36" 
                 style="opacity:0.7; filter: grayscale(30%);"
                 alt="department">
             </div>
