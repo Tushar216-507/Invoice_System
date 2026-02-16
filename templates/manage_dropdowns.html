@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block content %}
+    <div class="container mt-5">
+        <h2 class="mb-4">Manage Dropdown Values</h2>
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="alert alert-info">
+              {{ messages[0] }}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <!-- Add New Dropdown Value -->
+        <form method="POST" class="mb-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="type">Dropdown Type:</label>
+                <select name="type" class="form-control" required>
+                    <option value="">-- Select Type --</option>
+                    <option value="approved_by">Approved By</option>
+                    <option value="reviewed_by">Reviewed By</option>
+                    <option value="created_by">Prepared By</option>
+                    <option value="hod_values">HOD Approval</option>
+                    <option value="ceo_values">CEO Approval</option>
+                    <option value="tag1">TAG 1</option>
+                    <option value="tag2">TAG 2</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="value">User Name:</label>
+                <input type="text" name="value" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-success">ADD</button>
+        </form>
+
+        <!-- List Existing Values -->
+        {% for type, values in dropdown_data.items() %}
+            <h5 class="mt-4">{{ type.replace('_', ' ').title() }}</h5>
+            <ul class="list-group mb-3">
+                {% for item in values %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    {{ item.value }}
+                    <form method="POST" action="{{ url_for('delete_dropdown', id=item.id) }}" style="margin: 0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+        {% endfor %}
+    </div>
+{% endblock %}

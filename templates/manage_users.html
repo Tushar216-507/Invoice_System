@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+    .hero-section {
+        position: relative;
+        background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), 
+                    url('https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1200') center/cover;
+        padding: 60px 40px;
+        border-radius: 0;
+        margin: -20px -20px 30px -20px;
+        color: white;
+    }
+    
+    .hero-content {
+        max-width: 600px;
+    }
+    
+    .hero-section h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 15px;
+    }
+    
+    .hero-section p {
+        font-size: 1rem;
+        margin-bottom: 25px;
+        opacity: 0.9;
+    }
+    
+    .stats-card {
+        position: absolute;
+        top: 40px;
+        right: 40px;
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 12px;
+        padding: 30px;
+        min-width: 200px;
+        color: white;
+    }
+    
+    .stat-item {
+        margin-bottom: 20px;
+    }
+    
+    .stat-item:last-child {
+        margin-bottom: 0;
+    }
+    
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: 700;
+        display: block;
+        line-height: 1;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        margin-top: 5px;
+    }
+    
+    .users-table {
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .users-table table {
+        width: 100%;
+        margin: 0;
+    }
+    
+    .users-table thead {
+        background: #f8f9fa;
+    }
+    
+    .users-table th {
+        padding: 15px;
+        font-weight: 600;
+        color: #666;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .users-table td {
+        padding: 15px;
+        vertical-align: middle;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .user-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+    
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+    }
+    
+    .status-badge.active {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .status-badge.active::before {
+        content: '●';
+        color: #28a745;
+    }
+    
+    .status-badge.inactive {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .status-badge.inactive::before {
+        content: '●';
+        color: #dc3545;
+    }
+    
+    .action-icons {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .action-icon {
+        width: 32px;
+        height: 32px;
+        border: none;
+        background: #f8f9fa;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+        color: #666;
+    }
+    
+    .action-icon:hover {
+        background: #e9ecef;
+        color: #333;
+    }
+</style>
+
+<div class="hero-section">
+    <div class="hero-content">
+        <h1>Manage Users</h1>
+        <p>Create, update, and manage system users. Control roles, permissions, and account status.</p>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+            Add User
+        </button>
+    </div>
+    
+    <div class="stats-card">
+        <div class="stat-item">
+            <span class="stat-number">{{ users|length }}</span>
+            <div class="stat-label">Total Users</div>
+        </div>
+        <div class="stat-item">
+            <span class="stat-number">{{ users|selectattr('role', 'equalto', 'superadmin')|list|length }}</span>
+            <div class="stat-label">Total Superadmins</div>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid">
+    <div class="users-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>
+                        <div class="user-info">
+                            <img src="https://ui-avatars.com/api/?name={{ user.name }}&background=random" 
+                                 alt="{{ user.name }}" 
+                                 class="user-avatar">
+                            <span>{{ user.name }}</span>
+                        </div>
+                    </td>
+                    <td>{{ user.email }}</td>
+                    <td>{{ user.role|title }}</td>
+                    <td>
+                        <span class="status-badge {{ 'active' if user.is_active else 'inactive' }}">
+                            {{ 'Active' if user.is_active else 'Inactive' }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="action-icons">
+                           <form id="toggleForm{{ user.id }}" action="{{ url_for('toggle_user_status', user_id=user.id) }}" method="POST" style="display:inline;" onsubmit="toggleStatus(event, {{ user.id }})">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="action-icon" title="{{ 'Deactivate' if user.is_active else 'Activate' }}">
+                                    {{ '🟢' if user.is_active else '🔴' }}
+                                </button>
+                            </form>
+                            <button class="action-icon" title="Edit" data-bs-toggle="modal" data-bs-target="#editUserModal{{ user.id }}">
+                                ✏️
+                            </button>
+                            <button class="action-icon" title="Delete" onclick="deleteUser({{ user.id }})">
+                                🗑️
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('add_user') }}" method="POST" id="addUserForm" onsubmit="addUser(event)">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label>Name</label>
+                        <input type="text" name="name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>Email</label>
+                        <input type="email" name="email" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>Role</label>
+                        <select name="role" class="form-control" required>
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                            <option value="superadmin">Super Admin</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Add User</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit/View Modals for each user -->
+{% for user in users %}
+<!-- Edit User Modal -->
+<div class="modal fade" id="editUserModal{{ user.id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit User - {{ user.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('update_user_role', user_id=user.id) }}" method="POST" onsubmit="updateUser(event, {{ user.id }})">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <div class="mb-3">
+                            <label>Name</label>
+                            <input type="text" name="name" class="form-control" value="{{ user.name }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label>Email</label>
+                            <input type="email" name="email" class="form-control" value="{{ user.email }}" required>
+                        </div>
+                        <label>Role</label>
+                        <select name="role" class="form-control">
+                            <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
+                            <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
+                            <option value="superadmin" {% if user.role == 'superadmin' %}selected{% endif %}>Super Admin</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label>Status</label>
+                        <select name="status" class="form-control">
+                            <option value="active" {% if user.is_active %}selected{% endif %}>Active</option>
+                            <option value="inactive" {% if not user.is_active %}selected{% endif %}>Inactive</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Update User</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endfor %}
+
+<script>
+// ── Search ──────────────────────────────────────────────
+document.getElementById('searchInput').addEventListener('keyup', function() {
+    const searchTerm = this.value.toLowerCase();
+    document.querySelectorAll('.users-table tbody tr').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(searchTerm) ? '' : 'none';
+    });
+});
+
+// ── Select All ──────────────────────────────────────────
+document.getElementById('selectAll').addEventListener('change', function() {
+    document.querySelectorAll('.user-checkbox').forEach(cb => cb.checked = this.checked);
+});
+
+// ── Helper: get CSRF token ──────────────────────────────
+function getCSRF() {
+    return document.querySelector('[name="csrf_token"]').value;
+}
+
+// ── Add User ────────────────────────────────────────────
+function addUser(event) {
+    event.preventDefault();
+    const form = document.getElementById('addUserForm');
+    const data = new FormData(form);
+
+    fetch(form.action, { method: 'POST', body: data })
+        .then(res => {
+            if (res.ok || res.redirected) {
+                bootstrap.Modal.getInstance(document.getElementById('addUserModal')).hide();
+                location.reload();
+            } else {
+                alert('Failed to add user. Please try again.');
+            }
+        })
+        .catch(() => alert('Network error.'));
+}
+
+// ── Update User ─────────────────────────────────────────
+function updateUser(event, userId) {
+    event.preventDefault();
+    const form = event.target;
+    const data = new FormData(form);
+
+    fetch(form.action, { method: 'POST', body: data })
+        .then(res => {
+            if (res.ok || res.redirected) {
+                bootstrap.Modal.getInstance(document.getElementById('editUserModal' + userId)).hide();
+                location.reload();
+            } else {
+                alert('Failed to update user. Please try again.');
+            }
+        })
+        .catch(() => alert('Network error.'));
+}
+
+// ── Toggle Status ───────────────────────────────────────
+function toggleStatus(event, userId) {
+    event.preventDefault();
+    const form = document.getElementById('toggleForm' + userId);
+    const data = new FormData(form);
+
+    fetch(form.action, { method: 'POST', body: data })
+        .then(res => {
+            if (res.ok || res.redirected) {
+                location.reload();
+            } else {
+                alert('Failed to toggle status.');
+            }
+        })
+        .catch(() => alert('Network error.'));
+}
+
+// ── Delete User ─────────────────────────────────────────
+function deleteUser(userId) {
+    if (confirm('Are you sure you want to delete this user?')) {
+        fetch(`/delete_user/${userId}`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCSRF() }
+        })
+        .then(res => {
+            if (res.ok || res.redirected) {
+                location.reload();
+            } else {
+                alert('Failed to delete user.');
+            }
+        })
+        .catch(() => alert('Network error.'));
+    }
+}
+</script>
+
+{% endblock %}

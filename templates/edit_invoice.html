@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+    h1 { font-weight: 600; }
+    form {
+        background:#ffffff;
+        padding:30px;
+        border-radius:15px;
+        box-shadow:0 0 20px rgba(0,0,0,0.05);
+    }
+</style>
+
+<div class="container py-5">
+    <h1 class="text-center mb-4">Edit Invoice</h1>
+
+    <div class="row justify-content-center">
+        <div class="col-md-10 col-lg-8">
+
+            <form action="{{ url_for('edit_invoice', id=invoice.id) }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label for="invoice_date" class="form-label">Invoice Date:</label>
+                                <input type="date" id="invoice_date" name="invoice_date" class="form-control"
+                                    value="{{ invoice.invoice_date if invoice.invoice_date else '' }}"
+                                required>
+                        </div>
+            
+                        <div class="mb-3">
+                            <label for="date_received" class="form-label">Date Invoice Received:</label>
+                            <input type="date" id="date_received" name="date_received" class="form-control"
+                            value="{{ invoice.date_received if invoice.date_received else '' }}"
+                            required>
+                        </div>
+            
+                        <div class="form-group">
+                            <label for="vendor">Vendor</label>
+                            <select name="vendor" id="vendor" class="form-control" required>
+                                {% for v in vendors %}
+                                    <option value="{{ v.vendor_name }}"
+                                        {% if v.vendor_name == invoice.vendor %}selected{% endif %}>
+                                        {{ v.vendor_name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+            
+                        <div class="mb-3">
+                            <label for="mobile_no" class="form-label">Mobile No:</label>
+                            <input type="text" id="mobile_no" name="mobile_no" class="form-control" value="{{ invoice.mobile_no if invoice else '' }}" minlength="10" maxlength="10" pattern="[0-9]{10}" title="Please enter exactly 10 digits">
+                        </div>
+            
+                        <div class="mb-3">
+                            <label for="invoice_number" class="form-label">Invoice Number:</label>
+                           <input type="text" id="invoice_number" name="invoice_number" class="form-control"
+                                value="{{ invoice.invoice_number }}" required>
+                        </div>
+    
+                        <!-- Purchase Order Approved -->
+                        <div class="mb-3">
+                            <label for="po_approved" class="form-label">Purchase Order Approved:</label><br>
+                            <input type="radio" name="po_approved" value="Yes"
+                                {% if invoice.po_approved == 'Yes' %}checked{% endif %}>
+       
+                            <label for="po_approved_yes">Yes</label><br>
+                           <input type="radio" name="po_approved" value="No"
+                                {% if invoice.po_approved == 'No' %}checked{% endif %}>
+                            <label for="po_approved_no">No</label>
+                        </div>
+            
+                        <div class="mb-3">
+                            <label for="po_number" class="form-label">PO Number:</label>
+                           <input type="text" id="po_number" name="po_number" class="form-control"
+                                value="{{ invoice.po_number }}" required>
+
+                        </div>
+            
+                        <div class="mb-3">
+                            <label for="po_expiry_date" class="form-label">Date of Expiry Purchase Order (PO):</label>
+                            <select id="po_expiry_option" class="form-select" onchange="togglePOExpiryInput(this.value)">
+                                <option value="">Select...</option>
+                                <option value="date">Date</option>
+                                <option value="One-Time">One-Time</option>
+                            </select>
+                            <input type="date" id="po_expiry_date" class="form-control mt-2" style="display: none;">
+                           <input type="hidden" id="po_expiry_hidden" name="po_expiry_date"
+                                value="{{ invoice.po_expiry_date }}">
+
+                        </div>
+            
+                        <!-- Whether Agreement is Signed -->
+                        <div class="mb-3">
+                            <label for="agreement_signed" class="form-label">Agreement Signed:</label><br>
+
+                           <input type="radio" name="agreement_signed" value="Yes"
+                                {% if invoice.agreement_signed == 'Yes' %}checked{% endif %}>
+                            
+                            <label for="agreement_signed_yes">Yes</label><br>
+
+                            <input type="radio" name="agreement_signed" value="No"
+                                {% if invoice.agreement_signed == 'No' %}checked{% endif %}>
+
+                            <label for="agreement_signed_no">No</label>
+                        </div>
+            
+                        <!-- Date of Agreement Signed -->
+                        <!-- Agreement Signed Option + Date -->
+                        <div class="mb-3">
+                            <label class="form-label">Date of Agreement Signed:</label>
+                            
+                            <!-- Option Select -->
+                            <select id="agreement_signed_option" class="form-select mb-2">
+                                <option value="date" selected>Date</option>
+                                <option value="Till Termination">Till Termination</option> <!-- New change(patch2)-->
+                            </select>
+                            
+                            <!-- Date Input + Hidden Field -->
+                            <input type="date" name="agreement_signed_date"
+                                value="{{ invoice.agreement_signed_date if invoice.agreement_signed_date else '' }}">
+
+                            <input type="hidden" name="agreement_signed_date" id="agreement_signed_hidden">
+                        </div>
+            
+                        <div class="form-group">
+                            <label for="msme">MSME</label><br>
+                           <input type="radio" id="msme_yes" name="msme" value="Yes"
+                                {% if invoice.msme == 'Yes' %}checked{% endif %}>
+                            <label for="msme_yes">Yes</label><br>
+                            <input type="radio" id="msme_no" name="msme" value="No"
+                                {% if invoice.msme == 'No' %}checked{% endif %}>
+                            <label for="msme_no">No</label>
+                        </div>
+            
+                        <!-- Whether ISD -->
+                        <div class="mb-3">
+                            <label for="isd" class="form-label">ISD</label>
+                            <select class="form-select" id="isd" name="isd" required>
+                                <option value="No" {% if invoice.isd == 'No' %}selected{% endif %}>No</option>
+                                <option value="Yes" {% if invoice.isd == 'Yes' %}selected{% endif %}>Yes</option>
+                            </select>
+                        </div>
+                        
+            
+                        <div class="mb-3">
+                            <label for="date_submission" class="form-label">Date of Submission:</label>
+                            <input type="date" id="date_submission" name="date_submission" class="form-control"
+                            value="{{ invoice.date_submission if invoice.date_submission else '' }}"
+                            required>
+                        </div>
+            
+                        <div class="mb-3">
+                            <label for="approved_by" class="form-label">Approved By:</label>
+                            <select id="approved_by" name="approved_by" class="form-control">
+                                {% for value in approved_by_values %}
+                                    <option value="{{ value }}"
+                                        {% if value == invoice.approved_by %}selected{% endif %}>
+                                        {{ value }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <!-- HOD Approval -->
+                        <div class="mb-3">
+                            <label for="hod_values" class="form-label">HOD Approval:</label>
+                            <select id="hod_values" name="hod_values" class="form-control">
+                                {% for value in hod_values %}
+                                    <option value="{{ value }}"
+                                        {% if value == invoice.hod_values %}selected{% endif %}>
+                                        {{ value }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+            
+                        <!-- CEO Approval -->
+                        <div class="mb-3">
+                            <label for="ceo_values" class="form-label">CEO Approval:</label>
+                            <select id="ceo_values" name="ceo_values" class="form-control">
+                                {% for value in ceo_values %}
+                                    <option value="{{ value }}"
+                                        {% if value == invoice.ceo_values %}selected{% endif %}>
+                                        {{ value }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+            
+                        <!-- Reviewed By -->
+                        <div class="mb-3">
+                            <label for="reviewed_by" class="form-label">Invoice Owner:</label>
+                            <select id="reviewed_by" name="reviewed_by" class="form-control">
+                                {% for value in reviewed_by_values %}
+                                    <option value="{{ value }}"
+                                        {% if value == invoice.reviewed_by %}selected{% endif %}>
+                                        {{ value }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="created_by" class="form-label">Prepared By:</label>
+                            <select id="created_by" name="created_by" class="form-control" required>
+                                {% for value in created_by_values %}
+                                    <option value="{{ value }}"
+                                        {% if value == invoice.created_by %}selected{% endif %}>
+                                        {{ value }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <!-- TAG 1 -->
+                        <div class="mb-3">
+                            <label for="tag1" class="form-label">TAG 1:</label>
+                            <select id="tag1" name="tag1" class="form-control">
+                                {% for value in tag1 %}
+                                    <option value="{{ value }}"
+                                        {% if value == invoice.tag1 %}selected{% endif %}>
+                                        {{ value }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <!-- TAG 2 -->
+                        <div class="mb-3">
+                            <label for="tag2" class="form-label">TAG 2:</label>
+                            <select id="tag2" name="tag2" class="form-control">
+                                {% for value in tag2 %}
+                                    <option value="{{ value }}"
+                                        {% if value == invoice.tag2 %}selected{% endif %}>
+                                        {{ value }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+            
+                        <!-- Add Invoice Amount -->
+                        <div class="mb-3">
+                            <label for="invoice_amount" class="form-label">Invoice Amount:</label>
+                           <input type="number" name="invoice_amount" step="0.01"
+                                value="{{ invoice.invoice_amount }}">
+                        </div>
+            
+                        <!-- Add GST Amount -->
+                  <div class="mb-3">
+                            <label for="gst" class="form-label">GST Amount:</label>
+                            <input type="number" name="gst" step="0.01"
+                                value="{{ invoice.gst }}" readonly>
+                        </div>
+            
+                        <!-- Add Total Amount -->
+                        <div class="mb-3">
+                            <label for="total_amount" class="form-label">Total Amount (including GST):</label>
+                            <input type="number" name="total_amount" step="0.01"
+                                value="{{ invoice.total_amount }}">
+                        </div>
+            
+                        <!-- Invoice Cleared (Yes/No) -->
+                        <div class="mb-3">
+                            <label for="invoice_cleared" class="form-label">Invoice Cleared:</label><br>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="invoice_cleared" value="No"
+                                {% if invoice.invoice_cleared == 'No' %}checked{% endif %}>
+                                <label class="form-check-label" for="invoice_cleared_no">No</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="invoice_cleared" value="Yes"
+                                {% if invoice.invoice_cleared == 'Yes' %}checked{% endif %}>
+                                <label class="form-check-label" for="invoice_cleared_yes">Yes</label>
+                            </div>
+                        </div>
+            
+                        <!-- Invoice Cleared Date (Hidden unless 'Yes' is selected) -->
+                        <div class="mb-3" id="cleared_date_div"
+                            style="display: {% if invoice.invoice_cleared == 'Yes' %}block{% else %}none{% endif %};">
+
+                            <label for="invoice_cleared_date" class="form-label">Invoice Cleared Date:</label>
+                            <input type="date" id="invoice_cleared_date" name="invoice_cleared_date"
+                                value="{{ invoice.invoice_cleared_date if invoice.invoice_cleared_date else '' }}">
+                        </div>
+            
+                        <div class="text-center">
+                            <button type="submit" class="btn btn-primary">
+                                Update Invoice
+                            </button>
+
+                        </div>
+                    </form>
+
+            <div class="mt-3 text-center">
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                    Back to Invoice List
+                </a>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+{% endblock %}

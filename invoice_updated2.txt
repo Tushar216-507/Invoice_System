@@ -1,0 +1,20 @@
+invoice_updated2/
+├── static/
+│   ├── css/
+│   │   └── login.css
+│   ├── excel_templates/
+│   │   ├── template.xlsx
+│   │   └── Vendor_Payment_form.xlsx
+│   ├── images/
+│   │   ├── logo.png              ← Your existing logo
+│   │   └── top_left_bg.png
+│   └── js/                        
+│       ├── chatbot.js             
+│       ├── dashboard.js           
+│       ├── po-management.js   
+|       └── approvals.js
+├── templates/
+│   ├── admin_dashboard.html       
+│   ├── po_list.html              
+│   └── ...
+└── app_duplicate.py

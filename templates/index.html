@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% block content %}
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/fixedcolumns/4.3.0/css/fixedColumns.bootstrap5.min.css">
+
+<style>
+    body {
+        overflow-x: hidden;
+    }
+    
+    .table th, .table td {
+        vertical-align: middle;
+        text-align: center;
+        white-space: nowrap;
+        font-size: 0.85rem;
+        padding: 8px 6px !important;
+    }
+    
+    .btn-sm {
+        font-size: 0.7rem;
+        padding: 3px 6px;
+    }
+    
+    .table-hover tbody tr:hover {
+        background-color: #e9ecef;
+    }
+    
+    .badge-cleared {
+        background-color: #28a745;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+    }
+    
+    .badge-not-cleared {
+        background-color: #dc3545;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+    }
+
+    .badge {
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    }
+
+    .bg-success {
+        background-color: #28a745 !important;
+        color: white;
+    }
+
+    .bg-warning {
+        background-color: #ffc107 !important;
+        color: black;
+    }
+
+    .bg-danger {
+        background-color: #dc3545 !important;
+        color: white;
+    }
+    
+    h1 {
+        font-weight: bold;
+    }
+    
+    .action-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: center;
+    }
+    
+    /* Container and wrapper */
+    .container {
+        max-width: 100% !important;
+        padding: 0 15px;
+    }
+    
+    .dataTables_wrapper {
+        padding: 20px;
+        background-color: #fff;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    }
+    
+    /* DataTables styling */
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input {
+        padding: 5px 10px;
+        border-radius: 5px;
+        border: 1px solid #ddd;
+    }
+    .dataTables_wrapper .dataTables_length {
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+    }
+    
+    .dataTables_wrapper .dataTables_info,
+    .dataTables_wrapper .dataTables_paginate {
+        margin-top: 15px;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+        padding: 5px 12px;
+        margin: 0 2px;
+        border-radius: 5px;
+    }
+    
+    table.dataTable thead th {
+        background-color: #212529 !important;
+        color: white !important;
+        font-size: 0.8rem;
+        font-weight: 600;
+        padding-right: 25px !important;
+    }
+
+    table.dataTable thead .sorting,
+    table.dataTable thead .sorting_asc,
+    table.dataTable thead .sorting_desc {
+        padding-right: 25px !important;
+        background-position: center right 8px !important;
+    }
+    
+    /* Scrolling container */
+    .dataTables_scroll {
+        margin-bottom: 20px;
+    }
+    
+    .dataTables_scrollBody {
+        border: 1px solid #dee2e6 !important;
+    }
+    
+    /* Fixed columns styling */
+    table.dataTable.fixedColumns-left {
+        margin-left: 0 !important;
+    }
+</style>
+
+<div class="container mt-5">
+
+    <div class="header-buttons mb-4 d-flex justify-content-between align-items-center">
+        <h1>Invoice List</h1>
+        <a href="{{ url_for('add_invoice') }}" class="btn btn-primary btn-lg">Add New Invoice</a>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <div class="alert alert-info alert-dismissible fade show">
+        <ul class="mb-0">
+            {% for message in messages %}
+                <li>{{ message }}</li>
+            {% endfor %}
+        </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Filter Form -->
+    <form id="filterForm" method="POST" class="row gy-3 filter-form mb-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="col-md-3">
+            <input type="text" name="vendor" class="form-control" placeholder="Vendor" value="{{ request.form.get('vendor', '') }}">
+        </div>
+        <div class="col-md-2">
+            <input type="date" name="invoice_start_date" class="form-control" value="{{ request.form.get('invoice_start_date', '')  }}">
+        </div>
+        <div class="col-md-2">
+            <input type="date" name="invoice_end_date" class="form-control" value="{{ request.form.get('invoice_end_date', '') }}">
+        </div>
+        <div class="col-md-2">
+            <input type="text" name="invoice_number" class="form-control" placeholder="Invoice Number" value="{{ request.form.get('invoice_number', '') }}">
+        </div>
+        <div class="col-md-2">
+            <input type="text" name="po_number" class="form-control" placeholder="PO Number" value="{{ request.form.get('po_number', '') }}">
+        </div>
+        <div class="col-md-1">
+            <button type="submit" class="btn btn-primary w-100">Filter</button>
+        </div>
+        <div class="col-md-1">
+            <button type="button" class="btn btn-danger w-100" onclick="clearFilters()">Clear</button>
+        </div>
+    </form>
+
+    <!-- Filter Links -->
+    <div class="mb-4 d-flex gap-2">
+        <a href="{{ url_for('index', filter='all') }}" class="btn btn-info btn-sm">All</a>
+        <a href="{{ url_for('index', filter='cleared') }}" class="btn btn-success btn-sm">Cleared</a>
+        <a href="{{ url_for('index', filter='uncleared') }}" class="btn btn-danger btn-sm">Uncleared</a>
+    </div>
+
+    <!-- Table -->
+    <div class="mb-5">
+        <table id="invoiceTable" class="table table-striped table-hover table-bordered align-middle">            <thead class="table-dark">
+                <tr>
+                    <th>Invoice Date</th>
+                    <th>Date Received</th>
+                    <th>Vendor</th>
+                    <th>Invoice No</th>
+                    <th>PO No</th>
+                    <th>MSME</th>
+                    <th>Date Submission</th>
+                    <th>Approved By</th>
+                    <th>HOD</th>
+                    <th>CEO</th>
+                    <th>Reviewed By</th>
+                    <th>Created By</th>
+                    <th>Invoice Amount</th>
+                    <th>GST</th>
+                    <th>Total Amount</th>
+                    <th>Status</th>
+                    <th>Days Elapsed</th>
+                    <th>Cleared Date</th>
+                    <th>Actions</th>
+                    <th>Download</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for invoice in invoices %}
+                <tr>
+                    <td>{{ invoice.invoice_date }}</td>
+                    <td>{{ invoice.date_received }}</td>
+                    <td>{{ invoice.vendor }}</td>
+                    <td>{{ invoice.invoice_number }}</td>
+                    <td>{{ invoice.po_number }}</td>
+                    <td>{{ invoice.msme }}</td>
+                    <td>{{ invoice.date_submission }}</td>
+                    <td>{{ invoice.approved_by or 'N/A' }}</td>
+                    <td>{{ invoice.hod_values or 'N/A' }}</td>
+                    <td>{{ invoice.ceo_values or 'N/A' }}</td>
+                    <td>{{ invoice.reviewed_by or 'N/A' }}</td>
+                    <td>{{ invoice.created_by }}</td>
+                    <td>{{ invoice.invoice_amount }}</td>
+                    <td>{{ invoice.gst }}</td>
+                    <td>{{ invoice.total_amount }}</td>
+
+                    <td>
+                        {% if invoice.invoice_cleared == 'Yes' %}
+                            <span class="badge-cleared">Cleared</span>
+                        {% else %}
+                            <span class="badge-not-cleared">Not Cleared</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {% if invoice.days_elapsed != 'N/A' %}
+                            <span class="badge {% if invoice.days_elapsed > 30 %}bg-danger{% elif invoice.days_elapsed > 15 %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                                {{ invoice.days_elapsed }} days
+                            </span>
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+
+                    <td>{{ invoice.invoice_cleared_date if invoice.invoice_cleared == 'Yes' else 'N/A' }}</td>
+
+                    <td>
+                        <div class="action-buttons">
+                            {% if invoice.invoice_cleared != 'Yes' %}
+                                <a href="{{ url_for('edit_invoice', id=invoice.id) }}"
+                                    class="btn btn-warning btn-sm mb-1">
+                                    Edit
+                                </a>
+                            {% endif %}
+                            <button class="btn btn-danger btn-sm" onclick="confirmDelete({{ invoice.id }})">Delete</button>
+                        </div>
+                    </td>
+
+                    <td>
+                        <a href="{{ url_for('download_single_excel', id=invoice.id) }}" class="btn btn-primary btn-sm">Download</a>
+                    </td>
+
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- jQuery (required for DataTables) -->
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.datatables.net/responsive/2.5.0/js/responsive.bootstrap5.min.js"></script>
+<script src="https://cdn.datatables.net/fixedcolumns/4.3.0/js/dataTables.fixedColumns.min.js"></script>
+
+<script>
+function clearFilters() {
+    document.getElementById('filterForm').reset();
+    window.location.href = "{{ url_for('index') }}";
+}
+
+// Initialize DataTable
+$(document).ready(function() {
+    $('#invoiceTable').DataTable({
+        "pageLength": 25,
+        "lengthMenu": [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
+        "order": [[0, "desc"]],
+
+        "searching": false,
+        
+        // Disable responsive
+        "responsive": false,
+        
+        // Enable scrolling
+        "scrollX": true,
+        "scrollY": "500px",
+        "scrollCollapse": true,
+        
+        // Fixed columns
+        "fixedColumns": {
+            left: 2  // Fix Invoice Date and Date Received
+        },
+        
+        // Column definitions with exact widths
+        "columnDefs": [
+            { "width": "100px", "targets": 0 },  // Invoice Date
+            { "width": "100px", "targets": 1 },  // Date Received
+            { "width": "180px", "targets": 2 },  // Vendor
+            { "width": "120px", "targets": 3 },  // Invoice No
+            { "width": "150px", "targets": 4 },  // PO No
+            { "width": "70px", "targets": 5 },   // MSME
+            { "width": "110px", "targets": 6 },  // Date Submission
+            { "width": "120px", "targets": 7 },  // Approved By
+            { "width": "120px", "targets": 8 },  // HOD
+            { "width": "120px", "targets": 9 },  // CEO
+            { "width": "120px", "targets": 10 }, // Reviewed By
+            { "width": "120px", "targets": 11 }, // Created By
+            { "width": "110px", "targets": 12 }, // Invoice Amount
+            { "width": "80px", "targets": 13 },  // GST
+            { "width": "110px", "targets": 14 }, // Total Amount
+            { "width": "100px", "targets": 15 }, // Status
+            { "width": "110px", "targets": 16 }, // Days Elapsed
+            { "width": "110px", "targets": 16 }, // Cleared Date
+            { "width": "100px", "targets": 17, "orderable": false }, // Actions
+            { "width": "100px", "targets": 18, "orderable": false }  // Download
+        ],
+        
+        "autoWidth": false,
+        
+        "language": {
+            "search": "Search:",
+            "lengthMenu": "Show _MENU_ invoices",
+            "info": "Showing _START_ to _END_ of _TOTAL_ invoices",
+            "infoEmpty": "No invoices available",
+            "infoFiltered": "(filtered from _MAX_ total)",
+            "paginate": {
+                "first": "First",
+                "last": "Last",
+                "next": "Next",
+                "previous": "Prev"
+            },
+            "zeroRecords": "No matching invoices found"
+        },
+        
+        "deferRender": true,
+        "processing": false
+    });
+});
+</script>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Confirm Delete</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete this invoice?</p>
+        <p class="text-danger"><strong>This action cannot be undone.</strong></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <form id="deleteForm" method="post" style="display:inline;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function confirmDelete(invoiceId) {
+  const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+  const form = document.getElementById('deleteForm');
+  form.action = `/delete/${invoiceId}`;
+  modal.show();
+}
+</script>
+{% endblock %}

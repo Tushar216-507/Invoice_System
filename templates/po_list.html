@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+{% endblock %}
+{% block content %}
+
+<h1 class="mb-4">Purchase Order List</h1>
+
+<div class="d-flex justify-content-between mb-3">
+    <button class="btn btn-primary btn-lg" data-bs-toggle="modal" data-bs-target="#addPOModal">
+         Add PO
+    </button>
+</div>
+
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+<div class="alert alert-info alert-dismissible fade show">
+    {{ messages[0] }}
+    <button class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% endwith %}
+
+<div class="table-responsive shadow-lg p-3 mb-4 bg-body rounded">
+<table id="poTable" class="table table-striped table-hover table-bordered align-middle">
+    <thead class="table-dark">
+        <tr>
+            <th>PO Number</th>
+            <th>PO Date</th>
+            <th>Vendor Name</th>
+            <th>Grand Total ()</th>
+            <th>Approved By</th>
+            <th>Reviewed By</th>
+            <th>Created At</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for po in pos %}
+        <tr>
+            <td><strong>{{ po.po_number or 'N/A' }}</strong></td>
+            <td>{{ po.po_date or 'N/A' }}</td>
+            <td>{{ po.vendor_name }}</td>
+            <td>{{ "%.2f"|format(po.grand_total or 0) }}</td>
+            <td>{{ po.approved_by_name or 'N/A' }}</td>
+            <td>{{ po.reviewed_by_name or 'N/A' }}</td>
+            <td>{{ po.created_at }}</td>
+
+            <td>
+                <button class="btn btn-warning btn-sm"
+                        onclick="editPO('{{ po.id }}')">
+                    Edit
+                </button>
+
+                <a href="{{ url_for('download_po_pdf', po_id=po.id) }}"
+                   class="btn btn-primary btn-sm">
+                    Download
+                </a>
+
+                <button class="btn btn-danger btn-sm"
+                        onclick="deletePO('{{ po.id }}')">
+                    Delete
+                </button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+
+<!-- ========================= ADD PO MODAL ========================= -->
+<div class="modal fade" id="addPOModal" tabindex="-1">
+<div class="modal-dialog modal-xl">
+<div class="modal-content">
+
+<div class="modal-header">
+    <h5 class="modal-title">Add Purchase Order</h5>
+    <button class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<div class="modal-body">
+<form id="addPOForm">
+    <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
+
+
+<div class="card mb-3">
+<div class="card-body">
+<h6>PO Information</h6>
+<div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" id="is_po_mandatory" checked>
+    <label class="form-check-label" for="is_po_mandatory">
+        PO is mandatory
+    </label>
+</div>
+
+<div class="row" id="poFields">
+    <div class="col-md-6">
+        <label>PO Number</label>
+        <input id="add_po_number" class="form-control" required>
+    </div>
+
+    <div class="col-md-6">
+        <label>PO Date</label>
+        <input id="po_date" type="date" class="form-control" required>
+    </div>
+</div>
+</div>
+</div>
+
+<div class="card mb-3">
+<div class="card-body">
+<h6>Vendor Information</h6>
+
+<label>Vendor Name</label>
+<select id="vendor_name" class="form-control" required>
+<option value="">Select a vendor</option>
+{% for vendor in vendors %}
+    <option value="{{ vendor.vendor_name }}"
+            data-address="{{ vendor.vendor_address or '' }}">
+        {{ vendor.vendor_name }}
+    </option>
+{% endfor %}
+</select>
+
+<label class="mt-2">Vendor Address</label>
+<textarea id="vendor_address" class="form-control" rows="2" required></textarea>
+
+</div>
+</div>
+
+<div class="card">
+<div class="card-body">
+
+<h6>Items</h6>
+
+<table class="table table-sm">
+<thead>
+<tr>
+    <th>Description</th>
+    <th>Qty</th>
+    <th>Rate</th>
+    <th>Total ()</th>
+    <th>Action</th>
+</tr>
+</thead>
+<tbody id="itemsBody"></tbody>
+</table>
+
+<button type="button" class="btn btn-success btn-sm" onclick="addItemRow()">+ Add Item</button>
+
+</div>
+</div>
+
+<div class="mt-3">
+    <button class="btn btn-primary">Create PO</button>
+    <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+</div>
+
+</form>
+</div>
+
+</div>
+</div>
+</div>
+
+<!-- ========================= EDIT MODAL ========================= -->
+<div class="modal fade" id="editPOModal" tabindex="-1">
+<div class="modal-dialog modal-xl">
+<div class="modal-content">
+
+<div class="modal-header">
+    <h5>Edit Purchase Order</h5>
+    <button class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+
+<div class="modal-body">
+
+<form id="editPOForm">
+<input type="hidden" id="edit_po_id">
+
+<!-- ===== PO HEADER FIELDS ===== -->
+<div class="row mb-3">
+
+    <div class="col-md-6">
+    <label>PO Number</label>
+    <input id="edit_po_number" class="form-control" required readonly style="background-color: #f0f0f0;">
+    <small class="text-muted">Auto-generated when vendor is selected</small>
+</div>
+
+    <div class="col-md-4">
+        <label class="form-label">PO Date</label>
+        <input type="date" id="edit_po_date" class="form-control" required>
+    </div>
+
+    <div class="col-md-4">
+        <label class="form-label">Vendor Name</label>
+        <input type="text" id="edit_vendor_name" class="form-control" required>
+    </div>
+
+    <div class="col-md-12 mt-2">
+        <label class="form-label">Vendor Address</label>
+        <textarea id="edit_vendor_address" class="form-control" rows="2"></textarea>
+    </div>
+
+</div>
+
+<hr>
+
+<!-- ===== ITEMS TABLE ===== -->
+<table class="table table-sm">
+<thead>
+<tr>
+    <th>Description</th>
+    <th>Qty</th>
+    <th>Rate</th>
+    <th>Total</th>
+    <th>Action</th>
+</tr>
+</thead>
+<tbody id="editItemsBody"></tbody>
+</table>
+
+<button type="button" class="btn btn-success btn-sm" onclick="addEditItemRow()">+ Add Item</button>
+
+<div class="mt-3">
+    <button class="btn btn-primary">Save Changes</button>
+    <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+</div>
+
+</form>
+
+</div>
+
+</div>
+</div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+
+<!-- External JavaScript -->
+<script src="{{ url_for('static', filename='js/po-management.js') }}"></script>
+
+<!-- Pass vendor data to JavaScript -->
+<script>
+// Make vendor data available
+const vendorData = {{ vendors | tojson | safe }};
+initializeVendorMap(vendorData);
+
+// Initialize DataTable
+$(document).ready(function() {
+    $('#poTable').DataTable({
+        "pageLength": 10,
+        "lengthMenu": [[10, 25, 50, -1], [10, 25, 50, "All"]],
+        "order": [[6, "desc"]],
+
+        "searching": false,
+        "columnDefs": [
+            { "orderable": false, "targets": 7 }
+        ]
+    });
+});
+</script>
+{% endblock %}
