@@ -850,8 +850,13 @@ web: gunicorn app:app --timeout 120 --workers 5
 
 ### Running Locally
 ```bash
-# Activate virtual environment
+# Activate virtual environment for linux
+python -m venv venv
 source venv/bin/activate
+
+# Activate virtual environment for Windows
+python -m venv venv
+venv/Scripts/activate
 
 # Install dependencies
 pip install -r invoice_updated/requirements.txt
