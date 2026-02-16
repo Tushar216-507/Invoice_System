@@ -611,6 +611,26 @@
     cursor: pointer;
     padding: 6px;
   }
+  /* ================== QUARTER FILTER BUTTONS ================== */
+.quarter-btn {
+  padding: 5px 14px;
+  border-radius: 20px;
+  border: 2px solid #ff7a00;
+  background: white;
+  color: #ff7a00;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.quarter-btn.active {
+  background: #ff7a00;
+  color: white;
+}
+.quarter-btn:hover {
+  background: #ff7a00;
+  color: white;
+}
 </style>
 
 
@@ -712,7 +732,19 @@
 
 <!-- ================= MONTHLY CHART ================= -->
 <div class="chart-box mb-4">
-  <h5 class="fw-bold mb-3">Monthly Spend (Financial Year)</h5>
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="fw-bold mb-0">Monthly Spend (Financial Year)</h5>
+    <div class="d-flex align-items-center gap-2">
+      <span class="text-muted" style="font-size:13px; font-weight:600;">Quarter:</span>
+      <div class="d-flex gap-1">
+        <button class="quarter-btn active" onclick="applyQuarterFilter('all')">All</button>
+        <button class="quarter-btn" onclick="applyQuarterFilter('Q1')">Q1</button>
+        <button class="quarter-btn" onclick="applyQuarterFilter('Q2')">Q2</button>
+        <button class="quarter-btn" onclick="applyQuarterFilter('Q3')">Q3</button>
+        <button class="quarter-btn" onclick="applyQuarterFilter('Q4')">Q4</button>
+      </div>
+    </div>
+  </div>
   <div style="height:340px">
     <canvas id="monthlySpendChart"></canvas>
   </div>
@@ -947,9 +979,47 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-  // Chart data variables - available globally
-  const labels = {{ monthly_labels|default ([]) | tojson }};
-  const values = {{ monthly_values|default ([]) | tojson }};
+  // Quarter index mapping (Financial Year: Apr=Q1, Jul=Q2, Oct=Q3, Jan=Q4)
+  const quarterMap = {
+    Q1: [0, 1, 2],   // Apr, May, Jun
+    Q2: [3, 4, 5],   // Jul, Aug, Sep
+    Q3: [6, 7, 8],   // Oct, Nov, Dec
+    Q4: [9, 10, 11]  // Jan, Feb, Mar
+  };
+
+  function applyQuarterFilter(selected) {
+    // Update active button style
+    document.querySelectorAll('.quarter-btn').forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.textContent.trim() === selected || (selected === 'all' && btn.textContent.trim() === 'All')) {
+        btn.classList.add('active');
+      }
+    });
+
+    if (!window.monthlyChart) return;
+
+    const activeIndices = selected === 'all' ? null : quarterMap[selected];
+
+    const newColors = window.monthlyLabels.map((_, i) => {
+      if (!activeIndices || activeIndices.includes(i)) {
+        return 'rgba(255, 122, 0, 0.85)';   // highlighted - full orange
+      } else {
+        return 'rgba(200, 200, 200, 0.35)';  // dimmed - grey out
+      }
+    });
+
+    const newBorders = window.monthlyLabels.map((_, i) => {
+      if (!activeIndices || activeIndices.includes(i)) {
+        return 'rgba(255, 122, 0, 1)';
+      } else {
+        return 'rgba(180, 180, 180, 0.5)';
+      }
+    });
+
+    window.monthlyChart.data.datasets[0].backgroundColor = newColors;
+    window.monthlyChart.data.datasets[0].borderColor = newBorders;
+    window.monthlyChart.update();
+  }
 </script>
 
 <!-- ================= TAG1 MONTHLY TRENDS CHART ================= -->

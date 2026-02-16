@@ -28,7 +28,7 @@ function initializeMonthlyChart() {
   const labels = window.monthlyLabels || [];
   const dataValues = window.monthlyValues || [];
   
-  new Chart(ctx, {
+  window.monthlyChart = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: labels,
