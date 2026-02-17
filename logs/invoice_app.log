@@ -1847,3 +1847,8 @@ Traceback (most recent call last):
     po["po_date"] = po["po_date"].strftime("%Y-%m-%d")
                     ^^^^^^^^^^^^^^^^^^^^^^
 AttributeError: 'NoneType' object has no attribute 'strftime'
+2026-02-16 20:32:54,505 ERROR: ❌ Failed to create connection pool: 2003 (HY000): Can't connect to MySQL server on 'localhost:3306' (111) [in /home/tushar-kadam/Documents/Invoice_System/Invoice_System/app.py:407]
+2026-02-16 20:33:15,614 ERROR: ❌ Failed to create connection pool: 2003 (HY000): Can't connect to MySQL server on 'localhost:3306' (111) [in /home/tushar-kadam/Documents/Invoice_System/Invoice_System/app.py:407]
+2026-02-16 20:34:47,745 INFO: ✅ Database connection pool created [in /home/tushar-kadam/Documents/Invoice_System/Invoice_System/app.py:405]
+2026-02-16 20:36:00,295 INFO: ✅ Database connection pool created [in /home/tushar-kadam/Documents/Invoice_System/Invoice_System/app.py:405]
+2026-02-16 20:36:07,043 INFO: ✅ Database connection pool created [in /home/tushar-kadam/Documents/Invoice_System/Invoice_System/app.py:405]

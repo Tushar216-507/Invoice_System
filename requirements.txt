@@ -1,6 +1,10 @@
 Flask
 Flask-SQLAlchemy
 Flask-Mail
+Flask-Login
+Flask-WTF
+Flask-Limiter
+flask-cors
 mysql-connector-python
 python-dotenv
 xhtml2pdf
@@ -9,11 +13,11 @@ pandas
 openpyxl
 fastapi
 uvicorn
-python-dotenv
 pydantic
-mysql-connector-python
 requests
 openai
 groq
 python-dateutil
-flask-cors
+reportlab
+Pillow
+sqlparse
