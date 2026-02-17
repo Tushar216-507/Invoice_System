@@ -35,7 +35,23 @@ function initializeMonthlyChart() {
       datasets: [{
         label: 'Amount Spent ()',
         data: dataValues,
-        backgroundColor: '#4e79ff',
+        backgroundColor: [
+          // Q1 — Teal (Apr, May, Jun)
+          'rgba(78, 205, 196, 0.85)', 'rgba(78, 205, 196, 0.85)', 'rgba(78, 205, 196, 0.85)',
+          // Q2 — Amber (Jul, Aug, Sep)
+          'rgba(247, 183, 49, 0.85)', 'rgba(247, 183, 49, 0.85)', 'rgba(247, 183, 49, 0.85)',
+          // Q3 — Coral (Oct, Nov, Dec)
+          'rgba(252, 92, 101, 0.85)', 'rgba(252, 92, 101, 0.85)', 'rgba(252, 92, 101, 0.85)',
+          // Q4 — Violet (Jan, Feb, Mar)
+          'rgba(165, 94, 234, 0.85)', 'rgba(165, 94, 234, 0.85)', 'rgba(165, 94, 234, 0.85)'
+        ],
+        borderColor: [
+          'rgba(78, 205, 196, 1)', 'rgba(78, 205, 196, 1)', 'rgba(78, 205, 196, 1)',
+          'rgba(247, 183, 49, 1)', 'rgba(247, 183, 49, 1)', 'rgba(247, 183, 49, 1)',
+          'rgba(252, 92, 101, 1)', 'rgba(252, 92, 101, 1)', 'rgba(252, 92, 101, 1)',
+          'rgba(165, 94, 234, 1)', 'rgba(165, 94, 234, 1)', 'rgba(165, 94, 234, 1)'
+        ],
+        borderWidth: 1,
         borderRadius: 8
       }]
     },
