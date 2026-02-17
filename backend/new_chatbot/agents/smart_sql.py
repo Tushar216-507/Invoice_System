@@ -104,7 +104,7 @@ class SmartSQL:
             
             result = json.loads(result_text)
             
-            sql = result.get("sql", "").strip()
+            sql = (result.get("sql") or "").strip()
             
             # Basic safety check
             if not sql.upper().startswith("SELECT"):

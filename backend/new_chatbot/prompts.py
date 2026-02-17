@@ -305,7 +305,7 @@ Analyze this question and respond with JSON. Think naturally about what the user
 {{
     "can_proceed": true/false,
     "clarification": null or {{"question": "...", "options": ["Option 1", "Option 2", "Option 3"]}},
-    "intent": "invoice_query" | "po_query" | "vendor_query" | "user_query" | "analytics",
+    "intent": "invoice_query" | "po_query" | "vendor_query" | "user_query" | "analytics" | "greeting" | "chitchat" | "general",
     "entities": {{
         "vendor_names": [],
         "user_names": [],
@@ -316,30 +316,38 @@ Analyze this question and respond with JSON. Think naturally about what the user
         "aggregation": null or "count|sum|list"
     }},
     "tables": ["invoices"],
-    "reasoning": "Brief explanation of your understanding"
+    "reasoning": "Brief explanation of your understanding. For greeting/chitchat intents, write a friendly one-line response as the InvoiceBot assistant."
 }}
 
-⚠️ WHEN TO ASK CLARIFICATION (Name Collision):
-In this system, a person's name could exist BOTH as a vendor AND as a user.
+⚠️ WHEN TO ASK CLARIFICATION (Name Collision) — BE VERY CAREFUL:
+ONLY ask for name clarification when ALL of these are true:
+1. The question contains a REAL, RECOGNIZABLE person's name (like "Hemant", "Mrunal", "Shyju")
+2. That name could GENUINELY refer to either a vendor or user in the database
+3. The context does NOT make it clear whether they mean vendor or user
 
-When you see ANY person's name in the question WITHOUT clear context about whether it's a vendor or user, you should check:
-- Is this name asking about a VENDOR (supplier of invoices)?
-- Or is this name asking about a USER (who created/approved invoices)?
+🚫 NEVER ask clarification for:
+- Generic queries like "show pending invoices", "total invoices", "list vendors"
+- Greetings like "hi", "hello", "who are you", "how are you"
+- Short words, fragments, or abbreviations that aren't real names
+- Questions that don't mention any person's name at all
+- Questions where the context makes the meaning clear
 
-UNCLEAR patterns (ASK for clarification):
-- "invoices from [name]" → Unclear: FROM vendor OR created BY user?
-- "show [name]'s invoices" → Unclear: Vendor or user?
-- "tell me about [name]" → Unclear: Which entity?
-- "[name]'s pending invoices" → Unclear
+UNCLEAR patterns (ASK for clarification ONLY if a real name is present):
+- "invoices from [real name]" → Unclear: FROM vendor OR created BY user?
+- "show [real name]'s invoices" → Unclear: Vendor or user?
+- "tell me about [real name]" → Unclear: Which entity?
 
-CLEAR patterns (proceed without asking):
+CLEAR patterns (ALWAYS proceed, never ask):
 - "invoices created by [name]" → CLEAR: User (created_by field)
-- "invoices approved by [name]" → CLEAR: User (approved_by field)
+- "invoices approved by [name]" → CLEAR: User (approved_by field)  
 - "invoices from vendor [name]" → CLEAR: Vendor
-- "invoices from supplier [name]" → CLEAR: Vendor
-- "[name] vendor details" → CLEAR: Vendor
+- "show pending invoices" → CLEAR: No name involved, just proceed
+- "list all vendors" → CLEAR: Vendor list query
+- "hi", "hello", "who are you" → CLEAR: Greeting, just proceed
 
-When unclear, set can_proceed: false and provide natural clarification:
+⚠️ DEFAULT BEHAVIOR: When in doubt, set can_proceed: true. It is MUCH better to try answering than to ask unnecessary clarification questions!
+
+When genuinely unclear about a real name, set can_proceed: false:
 {{
     "can_proceed": false,
     "clarification": {{
@@ -353,6 +361,7 @@ GUIDELINES:
 - If the context is clear, proceed without asking
 - If conversation history gives context, use it
 - Default to can_proceed: true for simple queries without names
+- Default to can_proceed: true for greetings and non-database questions
 - For follow-up questions, infer context from previous messages"""
 
 # Smart SQL - Generates and self-validates SQL
@@ -385,10 +394,12 @@ Generate SQL and self-validate:
 ⚠️ NAME MATCHING (CRITICAL):
 Users type SHORTFORMS or PARTIAL names. You MUST use LIKE for fuzzy matching:
 - "shyju" means vendor "Shyjumon Thomas" → WHERE vendor LIKE '%shyju%'
-- "ncs" means vendor "Nimayate Corporate Solutions" → WHERE vendor LIKE '%ncs%' OR shortforms_of_vendor LIKE '%ncs%'
+- "ncs" means vendor "Nimayate Corporate Solutions" → WHERE vendor LIKE '%ncs%'  
 - "hemant" means user "Hemant Dhivar" → WHERE created_by LIKE '%hemant%'
 - NEVER use exact match (=) for names, ALWAYS use LIKE '%partial_name%'
-- When a shortform is used, ALWAYS query BOTH the vendor name column AND shortforms_of_vendor column with OR
+- Also check shortforms_of_vendors column in vendors table if available
+- IMPORTANT: When matching a full name like "Arindam Banerjee", use ONLY the FIRST NAME: WHERE vendor_name LIKE '%Arindam%'
+  (Last names may have spelling variations in the database, so match by first name only to be safe)
 
 QUERY GUIDELINES:
 - Use SELECT * for "full details" or "all info" requests
