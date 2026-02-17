@@ -905,19 +905,41 @@
 
     const activeIndices = selected === 'all' ? null : quarterMap[selected];
 
+    const quarterColors = {
+      0: 'rgba(78, 205, 196, 0.85)',  // Q1 — Teal
+      1: 'rgba(78, 205, 196, 0.85)',
+      2: 'rgba(78, 205, 196, 0.85)',
+      3: 'rgba(247, 183, 49, 0.85)',  // Q2 — Amber
+      4: 'rgba(247, 183, 49, 0.85)',
+      5: 'rgba(247, 183, 49, 0.85)',
+      6: 'rgba(252, 92, 101, 0.85)',  // Q3 — Coral
+      7: 'rgba(252, 92, 101, 0.85)',
+      8: 'rgba(252, 92, 101, 0.85)',
+      9: 'rgba(165, 94, 234, 0.85)',  // Q4 — Violet
+      10: 'rgba(165, 94, 234, 0.85)',
+      11: 'rgba(165, 94, 234, 0.85)'
+    };
+
+    const quarterBorders = {
+      0: 'rgba(78, 205, 196, 1)',  1: 'rgba(78, 205, 196, 1)',  2: 'rgba(78, 205, 196, 1)',
+      3: 'rgba(247, 183, 49, 1)',  4: 'rgba(247, 183, 49, 1)',  5: 'rgba(247, 183, 49, 1)',
+      6: 'rgba(252, 92, 101, 1)', 7: 'rgba(252, 92, 101, 1)', 8: 'rgba(252, 92, 101, 1)',
+      9: 'rgba(165, 94, 234, 1)', 10: 'rgba(165, 94, 234, 1)', 11: 'rgba(165, 94, 234, 1)'
+    };
+
     const newColors = window.monthlyLabels.map((_, i) => {
       if (!activeIndices || activeIndices.includes(i)) {
-        return 'rgba(255, 122, 0, 0.85)';   // highlighted - full orange
+        return quarterColors[i] || 'rgba(78, 205, 196, 0.85)';
       } else {
-        return 'rgba(200, 200, 200, 0.35)';  // dimmed - grey out
+        return 'rgba(200, 200, 200, 0.25)';   // dimmed
       }
     });
 
     const newBorders = window.monthlyLabels.map((_, i) => {
       if (!activeIndices || activeIndices.includes(i)) {
-        return 'rgba(255, 122, 0, 1)';
+        return quarterBorders[i] || 'rgba(78, 205, 196, 1)';
       } else {
-        return 'rgba(180, 180, 180, 0.5)';
+        return 'rgba(180, 180, 180, 0.4)';
       }
     });
 
@@ -1089,12 +1111,12 @@
     'Q4 (Jan-Mar)': [9, 10, 11]
   };
   const vendorBarColors = [
-    'rgba(41, 128, 185, 0.8)',
-    'rgba(230, 126, 34, 0.8)',
-    'rgba(26, 188, 156, 0.8)',
-    'rgba(155, 89, 182, 0.8)',
-    'rgba(231, 76, 60, 0.8)',
-    'rgba(241, 196, 15, 0.8)',
+    'rgba(255, 107, 107, 0.8)',   // Watermelon red
+    'rgba(255, 190, 11, 0.8)',    // Sunflower yellow
+    'rgba(72, 199, 142, 0.8)',    // Mint green
+    'rgba(255, 140, 66, 0.8)',    // Peach orange
+    'rgba(52, 199, 222, 0.8)',    // Sky blue
+    'rgba(196, 113, 237, 0.8)',   // Lavender
   ];
 
   function buildVendorDatasets(data, selectedVendor) {

@@ -27,17 +27,68 @@ function initializeMonthlyChart() {
   // Get data from page (passed from Flask template)
   const labels = window.monthlyLabels || [];
   const dataValues = window.monthlyValues || [];
-  
-  window.monthlyChart = new Chart(ctx, {
+    // Plugin that draws grey background bars behind each bar
+  const shadowBarsPlugin = {
+    id: 'shadowBars',
+    beforeDatasetsDraw(chart) {
+      const { ctx, data, chartArea: { top, bottom }, scales: { x } } = chart;
+      const meta = chart.getDatasetMeta(0);
+      if (!meta || !meta.data || meta.data.length === 0) return;
+
+      ctx.save();
+      meta.data.forEach((bar) => {
+        ctx.fillStyle = 'rgba(220, 220, 220, 0.4)';
+        const barWidth = bar.width;
+        const x0 = bar.x - barWidth / 2;
+        const radius = 8;
+        const height = bottom - top;
+
+        // Draw rounded rectangle
+        ctx.beginPath();
+        ctx.moveTo(x0 + radius, top);
+        ctx.lineTo(x0 + barWidth - radius, top);
+        ctx.quadraticCurveTo(x0 + barWidth, top, x0 + barWidth, top + radius);
+        ctx.lineTo(x0 + barWidth, bottom);
+        ctx.lineTo(x0, bottom);
+        ctx.lineTo(x0, top + radius);
+        ctx.quadraticCurveTo(x0, top, x0 + radius, top);
+        ctx.closePath();
+        ctx.fill();
+      });
+      ctx.restore();
+    }
+  };
+   window.monthlyChart = new Chart(ctx, {
     type: 'bar',
+    plugins: [shadowBarsPlugin],
     data: {
       labels: labels,
-      datasets: [{
-        label: 'Amount Spent ()',
-        data: dataValues,
-        backgroundColor: '#4e79ff',
-        borderRadius: 8
-      }]
+      datasets: [
+        {
+          label: 'Amount Spent ()',
+          data: dataValues,
+          backgroundColor: [
+            // Q1 — Teal (Apr, May, Jun)
+            'rgba(78, 205, 196, 0.85)', 'rgba(78, 205, 196, 0.85)', 'rgba(78, 205, 196, 0.85)',
+            // Q2 — Amber (Jul, Aug, Sep)
+            'rgba(247, 183, 49, 0.85)', 'rgba(247, 183, 49, 0.85)', 'rgba(247, 183, 49, 0.85)',
+            // Q3 — Coral (Oct, Nov, Dec)
+            'rgba(252, 92, 101, 0.85)', 'rgba(252, 92, 101, 0.85)', 'rgba(252, 92, 101, 0.85)',
+            // Q4 — Violet (Jan, Feb, Mar)
+            'rgba(165, 94, 234, 0.85)', 'rgba(165, 94, 234, 0.85)', 'rgba(165, 94, 234, 0.85)'
+          ],
+          borderColor: [
+            'rgba(78, 205, 196, 1)', 'rgba(78, 205, 196, 1)', 'rgba(78, 205, 196, 1)',
+            'rgba(247, 183, 49, 1)', 'rgba(247, 183, 49, 1)', 'rgba(247, 183, 49, 1)',
+            'rgba(252, 92, 101, 1)', 'rgba(252, 92, 101, 1)', 'rgba(252, 92, 101, 1)',
+            'rgba(165, 94, 234, 1)', 'rgba(165, 94, 234, 1)', 'rgba(165, 94, 234, 1)'
+          ],
+          borderWidth: 1,
+          borderRadius: 8,
+          barPercentage: 0.6,
+          categoryPercentage: 0.8
+        }
+      ]
     },
     options: {
       responsive: true,

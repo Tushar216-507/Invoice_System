@@ -131,19 +131,16 @@ class UnifiedAnalyzer:
 TABLES:
 - invoices: id, invoice_number, vendor, total_amount, gst, invoice_date, date_received, 
   invoice_cleared (Yes/No), po_number, created_by, approved_by, reviewed_by, 
-  hod_values, ceo_values, department, deleted_at,deleted_by
+  hod_values, ceo_values, department, deleted_at
   
 - purchase_orders: id, po_number (format: FY25-26/XXX-DATE/N), vendor_id, 
   total_amount, cgst_amount, sgst_amount, grand_total, po_date, 
   created_by, approved_by, reviewed_by, deleted_at
   
 - vendors: id, vendor_name, vendor_status (Active/Inactive), department, 
-  shortforms_of_vendors (e.g., "NCS" for "Nimayate Corporate Solutions"), PAN, GSTIN, POC, POC_email,deleted_at
+  shortforms_of_vendors (e.g., "NCS" for "Nimayate Corporate Solutions"), PAN, GSTIN, POC, POC_email
 
 - users: id, name, email, role (user/admin/hod/ceo), department, is_active
-
-- vendor_requests: id,vendor_name,vendor_status,department,description,vendor_address,PAN,
-  POC,POC_number,POC_email,requested_by_name,requested_by_email,request_date,status,reviewed_by_user_id,reviewed_by_name,reviewed_date,rejection_reason
 
 KEY RELATIONSHIPS:
 - invoices.vendor = vendors.vendor_name

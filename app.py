@@ -785,7 +785,7 @@ class WhatsAppNotificationService:
         cache = self._token_cache
 
         # Return cached token if still valid
-        if cache["token"] and cache["expires_at"] and cache["expires_at"] > datetime.utcnow():
+        if cache["token"] and cache["expires_at"] and cache["expires_at"] > datetime.now(timezone.utc):
             return cache["token"]
 
         # Generate new token
@@ -925,6 +925,159 @@ class WhatsAppNotificationService:
 
 # Initialize WhatsApp service
 whatsapp_service = WhatsAppNotificationService()
+
+#=======================================================================================
+# EMAIL NOTIFICATION SERVICE (DICE API)
+#=======================================================================================
+class EmailNotificationService:
+
+    _token_cache = WhatsAppNotificationService._token_cache  # reuse same token
+
+    DICE_EMAIL_URL = "https://apimartech.auxilo.com/send-message/v1"
+
+    def __init__(self):
+        self.config = {
+            "api_username": os.getenv('DICE_API_USERNAME'),
+            "api_password": os.getenv('DICE_API_PASSWORD'),
+            "auth_url": os.getenv('DICE_AUTH_URL'),
+        }
+        self.enabled = os.getenv('EMAIL_DICE_ENABLED', 'False') == 'True'
+
+    def _get_token(self) -> str | None:
+        """Reuse cached DICE token (same logic as WhatsApp service)"""
+        cache = self._token_cache
+        if cache["token"] and cache["expires_at"] and cache["expires_at"] > datetime.now(timezone.utc):
+            return cache["token"]
+        try:
+            credentials = f"{self.config['api_username']}:{self.config['api_password']}"
+            auth_header = base64.b64encode(credentials.encode()).decode()
+            headers = {"Authorization": f"Basic {auth_header}", "User-Agent": "Python Requests"}
+            response = requests.get(self.config["auth_url"], headers=headers, timeout=10)
+            if not response.ok:
+                logger.error(f"DICE token generation failed: {response.text}")
+                return None
+            token = response.json().get("access_token", {}).get("data", {}).get("access_token")
+            if token:
+                cache["token"] = token
+                cache["expires_at"] = datetime.now(timezone.utc) + timedelta(days=6)
+            return token
+        except Exception as e:
+            logger.error(f"Error getting DICE token: {e}")
+            return None
+
+    def _send(self, email: str, template_id: str, subject: str, template_attr: dict) -> bool:
+        """Core method — builds payload and POSTs to DICE email endpoint"""
+        if not self.enabled:
+            logger.info("DICE email notifications are disabled")
+            return False
+        if not email:
+            logger.warning("No email address provided — skipping DICE email")
+            return False
+        token = self._get_token()
+        if not token:
+            logger.error("Failed to get DICE token — email not sent")
+            return False
+        try:
+            payload = {
+                "email": email,
+                "channel": "email",
+                "source": "Invoice System",
+                "type": "transactional",
+                "template_id": template_id,
+                "email_subject": subject,
+                "email_from_name": "Invoice System",
+                "template_attr": template_attr
+            }
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "Python Requests",
+                "Content-Type": "application/json"
+            }
+            response = requests.post(self.DICE_EMAIL_URL, json=payload, headers=headers, timeout=10)
+            logger.info(f"DICE email sent | template={template_id} | to={email} | status={response.status_code} | response={response.text}")
+
+            # If token was rejected, clear cache and retry once with a fresh token
+            if response.status_code == 401:
+                logger.warning("DICE token rejected (401) — clearing cache and retrying")
+                self._token_cache["token"] = None
+                self._token_cache["expires_at"] = None
+                token = self._get_token()
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+                    response = requests.post(self.DICE_EMAIL_URL, json=payload, headers=headers, timeout=10)
+                    logger.info(f"DICE email retry | status={response.status_code} | response={response.text}")
+
+            return response.ok
+        except Exception as e:
+            logger.error(f"Error sending DICE email to {email}: {e}")
+            return False
+
+    # ── Public methods (one per email type) ──────────────────────────────────
+
+    def send_otp(self, email: str, otp: str) -> bool:
+        return self._send(
+            email=email,
+            template_id="Send_Otp",
+            subject="Your OTP for Secure Verification",
+            template_attr={"otp": otp}
+        )
+
+    def send_invoice_added(self, email: str, invoice_number: str, vendor: str,
+                           invoice_amount, gst, total_amount, invoice_date,
+                           date_received, po_number: str, added_by: str) -> bool:
+        return self._send(
+            email=email,
+            template_id="Invoice_Added",          # ← confirm template ID with DICE team
+            subject=f"Invoice System: Invoice #{invoice_number} has been added to the system",
+            template_attr={
+                "invoice_number": invoice_number,
+                "vendor_name": vendor,
+                "invoice_amount": str(invoice_amount),
+                "gst": str(round(gst, 2)),
+                "total_amount": str(total_amount),
+                "invoice_date": str(invoice_date),
+                "date_received": str(date_received),
+                "po_number": po_number or "N/A",
+                "added_by": added_by
+            }
+        )
+
+    def send_invoice_cleared(self, email: str, invoice_number: str, vendor: str,
+                              total_amount, date_received, invoice_date,
+                              invoice_cleared_date: str, cleared_by: str) -> bool:
+        return self._send(
+            email=email,
+            template_id="Invoice_Cleared",        # ← confirm template ID with DICE team
+            subject=f"Invoice System: Invoice #{invoice_number} Cleared",
+            template_attr={
+                "invoice_number": invoice_number,
+                "vendor_name": vendor,
+                "total_amount": str(total_amount),
+                "date_received": str(date_received),
+                "invoice_date": str(invoice_date),
+                "invoice_cleared_date": str(invoice_cleared_date),
+                "cleared_by": cleared_by
+            }
+        )
+
+    def send_vendor_approved(self, email: str, vendor_name: str, description: str,
+                              requested_by: str, approved_by: str) -> bool:
+        return self._send(
+            email=email,
+            template_id="Vendor_Added",        # ← confirm template ID with DICE team
+            subject="Invoice System: New Vendor Addition",
+            template_attr={
+                "vendor_name": vendor_name,
+                "vendor_description": description,
+                "requested_by": requested_by,
+                "added_on": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "approved_by": approved_by
+            }
+        )
+
+
+# Initialize Email service
+email_service = EmailNotificationService()
 #=======================================================================================
 # CHATBOT ENDPOINT - Using new hybrid chatbot  
 #=======================================================================================
@@ -1327,9 +1480,9 @@ def send_otp():
 
     # Send the OTP email
     try:
-        msg = Message('Your OTP Code', sender=os.getenv('MAIL_USERNAME'), recipients=[email])
-        msg.body = f'Your OTP code is {otp}.'
-        mail.send(msg)
+        sent = email_service.send_otp(email=email, otp=otp)
+        if not sent:
+            return jsonify({'error': 'Failed to send OTP. Please try again later.'}), 500
     except Exception as e:
         return jsonify({'error': 'Failed to send OTP. Please try again later.'}), 500
 
@@ -2273,42 +2426,20 @@ def add_invoice():
                     try:
                         invoice_added_recipients = os.getenv('INVOICE_ADDED_RECIPIENTS', '')
                         if invoice_added_recipients:
-                            msg = Message(
-                                'Invoice System: New Invoice Added',
-                                sender=os.getenv('MAIL_USERNAME'),
-                                recipients=[r.strip() for r in invoice_added_recipients.split(',') if r.strip()]
-                            )
-                            msg.body = f"""
-Hello Team,
-
-This is to inform you that a new invoice has been added to the Invoice System.
-
-Please find the invoice details below for your reference:
-
-------------------------------------------------------------
-INVOICE DETAILS
-------------------------------------------------------------
-Invoice Number            : {invoice_number}
-Vendor Name               : {vendor}
-Invoice Amount            : ₹{invoice_amount}
-GST                       : ₹{round(gst, 2)}
-Total Amount              : ₹{total_amount}
-Invoice Date              : {invoice_date}
-Date Received             : {date_received}
-PO Number                 : {po_number or 'N/A'}
-Added By                  : {user.name}
-------------------------------------------------------------
-
-The invoice has been successfully recorded in the system.
-
-For any queries or clarifications, please get in touch with the system administrator at
-tushar.kadam@auxilo.com.
-
-Regards,
-Invoice System
-                            """
-                            mail.send(msg)
-                            logger.info(f"Invoice added email sent for {invoice_number} to {invoice_added_recipients}")
+                            for recipient in [r.strip() for r in invoice_added_recipients.split(',') if r.strip()]:
+                                email_service.send_invoice_added(
+                                    email=recipient,
+                                    invoice_number=invoice_number,
+                                    vendor=vendor,
+                                    invoice_amount=invoice_amount,
+                                    gst=gst,
+                                    total_amount=total_amount,
+                                    invoice_date=invoice_date,
+                                    date_received=date_received,
+                                    po_number=po_number,
+                                    added_by=user.name
+                                )
+                            logger.info(f"DICE invoice added email sent for {invoice_number} to {invoice_added_recipients}")
                     except Exception as e:
                         logger.error(f"Failed to send invoice added email for {invoice_number}: {e}")
                     
@@ -2627,43 +2758,22 @@ def edit_invoice(id):
             email_sent = False
             whatsapp_sent = False
             try:
-                msg = Message(
-                    'Invoice System: Invoice Cleared',
-                    sender=os.getenv('MAIL_USERNAME'),
-                    recipients=os.getenv('VENDOR_ADDED_RECIPIENTS').split(',')
-                )
-                msg.body = f"""
-                Hello Team,
-
-                This is to inform you that the following invoice has been successfully cleared in the Invoice System.
-
-                Please find the invoice details below for your reference:
-
-                ------------------------------------------------------------
-                INVOICE DETAILS
-                ------------------------------------------------------------
-                Invoice Number            : {invoice_number}
-                Vendor Name               : {vendor}
-                Invoice Amount            : ₹{total_amount}
-                Invoice Received Date     : {date_received}
-                Invoice Entered Date      : {invoice['invoice_date']}
-                Invoice Cleared Date      : {invoice_cleared_date}
-                Cleared By                      : {current_user.name}
-                ------------------------------------------------------------
-
-                The invoice status has been updated to *Cleared* in the system.
-
-                For any queries or clarifications, please get in touch with the system administrator at
-                tushar.kadam@auxilo.com.
-
-                Regards,
-                Invoice System
-                """
-                mail.send(msg)
+                recipients = os.getenv('VENDOR_ADDED_RECIPIENTS', '').split(',')
+                for recipient in [r.strip() for r in recipients if r.strip()]:
+                    email_service.send_invoice_cleared(
+                        email=recipient,
+                        invoice_number=invoice_number,
+                        vendor=vendor,
+                        total_amount=total_amount,
+                        date_received=date_received,
+                        invoice_date=invoice['invoice_date'],
+                        invoice_cleared_date=invoice_cleared_date,
+                        cleared_by=current_user.name
+                    )
                 email_sent = True
-                log_activity(f'The email has been sent to specific user to update that invoice for {vendor} with invoice number: {invoice_number} has been cleared')
+                log_activity(f'Email sent: invoice {invoice_number} for {vendor} cleared')
             except Exception as e:
-                logger.error(f"Failed to send vendor approval email: {e}")
+                logger.error(f"Failed to send invoice cleared email: {e}")
                 email_sent = False
 
             #----------------------------------------------------------------
@@ -3316,36 +3426,23 @@ def approve_vendor_request(request_id):
 
         email_sent = False
         try:
-            msg = Message(
-                'Invoice System: New Vendor Addition',
-                sender=os.getenv('MAIL_USERNAME'),
-                recipients=os.getenv('VENDOR_ADDED_RECIPIENTS').split(',')
-            )
-            msg.body = f"""
-            Hello Team,
-            This is to formally notify you that a new vendor has been added to the Invoice System following approval.
-
-            ------------------------------------------------------------------
-            VENDOR DETAILS
-            ------------------------------------------------------------------
-
-            Vendor Name            : {vendor_req['vendor_name']}
-            Vendor Description   : {vendor_req['description']}
-            Request Created By   : {vendor_req['requested_by_name']} 
-            Added On                 : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-            Approved By             : {current_user.name}
-            ------------------------------------------------------------------
-
-            The vendor is now active and available for use in the system.
-
-            For any queries, get in touch with system admin at tushar.kadam@auxilo.com .
-
-            Regards,
-            Invoice System
-            """
-            mail.send(msg)
+            recipients = os.getenv('VENDOR_ADDED_RECIPIENTS', '').split(',')
+            for recipient in [r.strip() for r in recipients if r.strip()]:
+                sent = email_service.send_vendor_approved(
+                    email=recipient,
+                    vendor_name=vendor_req['vendor_name'],
+                    description=vendor_req['description'],
+                    requested_by=vendor_req['requested_by_name'],
+                    approved_by=current_user.name
+                )
+                if sent:
+                    email_sent=True
+                    logger.info(f"Vendor approved email sent to {recipient}")
+                else:
+                    logger.warning(f"Vendor approved email FAILED for {recipient}")
+                     
             email_sent = True
-            log_activity(f'The email has been sent to specific user to update that {vendor_req['vendor_name']} has been added')
+            log_activity(f'Email sent: vendor {vendor_req["vendor_name"]} approved')
         except Exception as e:
             logger.error(f"Failed to send vendor approval email: {e}")
             email_sent = False

@@ -65,7 +65,32 @@ class InvoiceChatbotV2:
             
             # Check if this is a response to a pending clarification
             if conversation_manager.has_pending_clarification(session_id):
-                return self._handle_clarification_response(session_id, question)
+                # Detect if this is actually a new question, not a clarification response
+                q_stripped = question.strip().lower()
+                pending = conversation_manager.get_pending_clarification(session_id)
+                
+                # A clarification response is typically: a number (1/2/3), or 
+                # text that closely matches one of the options
+                is_clarification_response = False
+                
+                # Check if it's a number choice
+                if q_stripped in ['1', '2', '3', 'one', 'two', 'three']:
+                    is_clarification_response = True
+                else:
+                    # Check if the response text matches any option
+                    if pending and pending.options:
+                        for opt in pending.options:
+                            if q_stripped in opt.lower() or opt.lower() in q_stripped:
+                                is_clarification_response = True
+                                break
+                
+                if is_clarification_response:
+                    return self._handle_clarification_response(session_id, question)
+                else:
+                    # User is asking a new question — cancel pending clarification
+                    logger.info(f"New question detected, cancelling pending clarification")
+                    conversation_manager.resolve_clarification(session_id, "cancelled_by_user")
+                    # Fall through to process as new query
             
             # Get conversation history
             history = conversation_manager.get_history_text(session_id)
@@ -73,6 +98,19 @@ class InvoiceChatbotV2:
             # ========== STEP 1: Unified Analysis ==========
             analysis = unified_analyzer.analyze(question, history)
             logger.info(f"Analysis: intent={analysis['intent']}, can_proceed={analysis['can_proceed']}")
+            
+            # Handle non-database intents (greetings, chitchat)
+            if analysis["intent"] in ("greeting", "chitchat", "general"):
+                # Respond conversationally without going through SQL pipeline
+                friendly_msg = analysis.get("reasoning", "")
+                if not friendly_msg or len(friendly_msg) < 5:
+                    friendly_msg = "Hello! I'm InvoiceBot 🤖 — I can help you with invoice queries, vendor details, PO information, and more. How can I help you today?"
+                conversation_manager.add_message(session_id, "assistant", friendly_msg)
+                return ChatResponse(
+                    message=friendly_msg,
+                    success=True,
+                    session_id=session_id
+                )
             
             # Check if clarification is needed
             if not analysis["can_proceed"] and analysis.get("clarification"):
@@ -117,7 +155,8 @@ class InvoiceChatbotV2:
             )
             
             if not sql_result["success"]:
-                error_msg = f"I couldn't generate a query for your question. Error: {sql_result['error']}"
+                error_msg = "I'm sorry, I couldn't process your question. Could you try rephrasing it? For example, you can ask me about invoices, vendors, purchase orders, or users."
+                logger.warning(f"SQL generation failed: {sql_result['error']}")
                 conversation_manager.add_message(session_id, "assistant", error_msg)
                 return ChatResponse(
                     message=error_msg,
