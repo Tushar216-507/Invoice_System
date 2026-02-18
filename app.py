@@ -1476,7 +1476,8 @@ def send_otp():
     user.otp_created_at = datetime.utcnow()
     user.otp_attempts = 0
     db.session.commit()
-
+    # Only for me because i doesn't receive emails form DICE api
+    print(f"OTP: {otp}")
 
     # Send the OTP email
     try:
