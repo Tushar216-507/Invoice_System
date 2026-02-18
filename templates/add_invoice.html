@@ -38,6 +38,16 @@
         .mb-3, .form-group {
             margin-bottom: 1.2rem !important;
         }
+        .section-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 18px;
+            border-radius: 8px;
+            margin: 28px 0 18px 0;
+            font-weight: 600;
+            font-size: 15px;
+            letter-spacing: 0.3px;
+        }
     </style>
 
 </head>
@@ -63,6 +73,7 @@
                     <!-- Add Invoice Form -->
                     <form action="{{ url_for('add_invoice') }}" method="post">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="section-header">1. Invoice Details</div>
                         <div class="mb-3">
                             <label for="invoice_date" class="form-label">Invoice Date:</label>
                             <input type="date" id="invoice_date" name="invoice_date" class="form-control"  value="{{ form_data.invoice_date if form_data else '' }}" required>
@@ -72,7 +83,7 @@
                             <label for="date_received" class="form-label">Date Invoice Received:</label>
                             <input type="date" id="date_received" name="date_received" class="form-control" value="{{ form_data.date_received if form_data else '' }}" required>
                         </div>
-            
+                        <div class="section-header">2. Vendor Information</div>
                         <div class="form-group">
                             <label for="vendor">Vendor</label>
                             <select name="vendor" id="vendor" class="form-control" required>
@@ -110,11 +121,17 @@
                         </div> -->
             
                         <!-- Purchase Order Approved -->
+                        <div class="section-header">3. Purchase Order</div>
                         <div class="mb-3">
                             <label for="po_approved" class="form-label">Purchase Order Approved:</label><br>
-                            <input type="radio" id="po_approved_yes" name="po_approved" value="Yes" {% if form_data and form_data.po_approved == 'Yes' %}checked{% endif %} required>                            <label for="po_approved_yes">Yes</label><br>
-                            <input type="radio" id="po_approved_no" name="po_approved" value="No" {% if form_data and form_data.po_approved == 'No' %}checked{% endif %} required>
-                            <label for="po_approved_no">No</label>
+                           <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" id="po_approved_yes" name="po_approved" value="Yes" {% if form_data and form_data.po_approved == 'Yes' %}checked{% endif %} required>
+                                <label class="form-check-label" for="po_approved_yes">Yes</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" id="po_approved_no" name="po_approved" value="No" {% if form_data and form_data.po_approved == 'No' %}checked{% endif %} required>
+                                <label class="form-check-label" for="po_approved_no">No</label>
+                            </div>
                         </div>
             
                         <div class="mb-3">
@@ -141,15 +158,19 @@
                         <!-- Whether Agreement is Signed -->
                         <div class="mb-3">
                             <label for="agreement_signed" class="form-label">Agreement Signed:</label><br>
-                            <input type="radio" id="agreement_signed_yes" name="agreement_signed" value="Yes" {% if form_data and form_data.agreement_signed == 'Yes' %}checked{% endif %} required>
-                            <label for="agreement_signed_yes">Yes</label><br>
-                            <input type="radio" id="agreement_signed_no" name="agreement_signed" value="No" {% if form_data and form_data.agreement_signed == 'No' %}checked{% endif %} required>
-                            <label for="agreement_signed_no">No</label>
-                        </div>
+                            <div class="form-check form-check-inline">
+                                <input type="radio" id="agreement_signed_yes" name="agreement_signed" value="Yes" {% if form_data and form_data.agreement_signed == 'Yes' %}checked{% endif %} required>
+                                <label for="agreement_signed_yes">Yes</label><br>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input type="radio" id="agreement_signed_no" name="agreement_signed" value="No" {% if form_data and form_data.agreement_signed == 'No' %}checked{% endif %} required>
+                                <label for="agreement_signed_no">No</label>
+                            </div>
+                         </div>
             
                         <!-- Date of Agreement Signed -->
                         <!-- Agreement Signed Option + Date -->
-                        <div class="mb-3">
+                         <div class="mb-3" id="agreement_date_div" {% if form_data and form_data.agreement_signed == 'No' %}hidden{% endif %}>
                             <label class="form-label">Date of Agreement Signed:</label>
                             
                             <!-- Option Select -->
@@ -163,10 +184,14 @@
             
                         <div class="form-group">
                             <label for="msme">MSME</label><br>
-                            <input type="radio" id="msme_yes" name="msme" value="Yes" {% if form_data and form_data.msme == 'Yes' %}checked{% endif %}>
-                            <label for="msme_yes">Yes</label><br>
-                            <input type="radio" id="msme_no" name="msme" value="No" {% if form_data and form_data.msme == 'No' %}checked{% endif %}>
-                            <label for="msme_no">No</label>
+                            <div class="form-check form-check-inline">
+                                <input type="radio" id="msme_yes" name="msme" value="Yes" {% if form_data and form_data.msme == 'Yes' %}checked{% endif %}>
+                                <label for="msme_yes">Yes</label><br>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input type="radio" id="msme_no" name="msme" value="No" {% if form_data and form_data.msme == 'No' %}checked{% endif %}>
+                                <label for="msme_no">No</label>
+                            </div>
                         </div>
             
                         <!-- Whether ISD -->
@@ -248,6 +273,7 @@
                         </div>
             
                         <!-- Add Invoice Amount -->
+                        <div class="section-header">5. Amount Details</div>
                         <div class="mb-3">
                             <label for="invoice_amount" class="form-label">Invoice Amount:</label>
                             <input type="number" id="invoice_amount" name="invoice_amount" class="form-control" step="0.01" value="{{ form_data.invoice_amount if form_data else '' }}" required oninput="calculateAmounts()">                        
@@ -278,6 +304,7 @@
                         </div> -->
             
                         <!-- Invoice Cleared (Yes/No) -->
+                        <div class="section-header">6. Payment &amp; Submission</div>
                         <div class="mb-3">
                             <label for="invoice_cleared" class="form-label">Invoice Cleared:</label><br>
                             <div class="form-check form-check-inline">
@@ -396,7 +423,13 @@
                                 hiddenInput.val(selectedOption); // "One-Time"
                             }
                         });
-            
+                        $('input[name="agreement_signed"]').change(function () {
+                            if ($(this).val() === 'No') {
+                                $('#agreement_date_div').hide();
+                            } else {
+                                $('#agreement_date_div').show();
+                            }
+                        });
                         $('#agreement_signed_option').on('change', function () {
                             const selectedOption = $(this).val();
                             const dateInput = $('#agreement_signed_date');
