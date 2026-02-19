@@ -187,6 +187,7 @@
                     <th>Name</th>
                     <th>Email</th>
                     <th>Role</th>
+                    <th>Department</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
@@ -204,6 +205,7 @@
                     </td>
                     <td>{{ user.email }}</td>
                     <td>{{ user.role|title }}</td>
+                    <td>{{ user.department|title if user.department else '—' }}</td>
                     <td>
                         <span class="status-badge {{ 'active' if user.is_active else 'inactive' }}">
                             {{ 'Active' if user.is_active else 'Inactive' }}
@@ -259,6 +261,15 @@
                             <option value="superadmin">Super Admin</option>
                         </select>
                     </div>
+                    <div class="mb-3">
+                        <label>Department</label>
+                        <select name="department" class="form-control" required>
+                            <option value="">-- Select Department --</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept }}">{{ dept }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                     <button type="submit" class="btn btn-primary w-100">Add User</button>
                 </form>
             </div>
@@ -300,6 +311,15 @@
                         <select name="status" class="form-control">
                             <option value="active" {% if user.is_active %}selected{% endif %}>Active</option>
                             <option value="inactive" {% if not user.is_active %}selected{% endif %}>Inactive</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label>Department</label>
+                        <select name="department" class="form-control" required>
+                            <option value="">-- Select Department --</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept }}" {% if user.department == dept %}selected{% endif %}>{{ dept }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <button type="submit" class="btn btn-primary w-100">Update User</button>

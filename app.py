@@ -3603,11 +3603,11 @@ def delete_dropdown(id):
 @superadmin_required
 def manage_users():
     users = Users.query.all()
-
-    #  Log the activity
+    from sqlalchemy import text
+    departments = db.session.execute(text('SELECT department_name FROM departments ORDER BY department_name')).fetchall()
+    departments = [d[0] for d in departments]
     user_name = request.cookies.get('name') or request.cookies.get('email')
-
-    return render_template('manage_users.html', users=users)
+    return render_template('manage_users.html',users=users,departments=departments)
 
 # Route to add a new user (superadmin only)
 @app.route('/add_user', methods=['POST'])
@@ -3616,6 +3616,7 @@ def add_user():
     name = request.form.get('name', '').strip()
     email = request.form.get('email', '').strip()
     role = request.form.get('role', '').strip()
+    department = request.form.get('department', '').strip()
 
     if not name or len(name) <2:
         flash('Name must be at least 2 characters long','error')
@@ -3631,7 +3632,7 @@ def add_user():
 
     existing_user = Users.query.filter_by(email=email).first()
     if not existing_user:
-        new_user = Users(name=name, email=email, role=role, is_active=True)
+        new_user = Users(name=name, email=email, role=role,department=department, is_active=True)
         db.session.add(new_user)
         db.session.commit()
 
@@ -3688,6 +3689,7 @@ def update_user_role(user_id):
     new_name = request.form.get('name', '').strip()
     new_email = request.form.get('email','').strip()
     new_status = request.form.get('status')
+    new_department = request.form.get('department','').strip()
 
     if new_role in ['user', 'admin', 'superadmin']:
         old_role = user.role
@@ -3698,6 +3700,9 @@ def update_user_role(user_id):
 
         if new_email:
             user.email = new_email
+            
+        if new_department:
+            user.department = new_department
 
         if new_status in ['active','inactive']:
             user.is_active = (new_status == 'active')
