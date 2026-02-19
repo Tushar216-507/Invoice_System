@@ -1456,7 +1456,7 @@ def log_activity(action):
 # Endpoint route to send OTP to valid users
 @app.route('/send-otp', methods=['POST'])
 @csrf.exempt
-@limiter.limit("3 per hour")
+@limiter.limit("10 per hour")
 def send_otp():
     data = request.json
     email = data.get('email')
