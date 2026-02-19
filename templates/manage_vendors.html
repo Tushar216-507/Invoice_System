@@ -1175,7 +1175,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 showToast('Vendor updated successfully!', 'success');
                 
                 // Update the vendor name and status badge in the card
-                const vendorCard = document.querySelector(`button[data-bs-target="#editVendorModal-${vendorId}"]`).closest('.card');
+                const triggerBtn = document.querySelector(`button[data-bs-target="#editVendorModal-${vendorId}"]`);
+                const vendorCard = document.querySelector(`button[data-bs-target="#editVendorModal-${vendorId}"]`).closest('.vendor-card');
                 const vendorName = vendorCard.querySelector('h5');
                 const statusBadge = vendorCard.querySelector('.badge');
                 
@@ -1229,9 +1230,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 showToast('Vendor deleted successfully!', 'success');
                 
                 // Remove the vendor card from the DOM
-                const vendorCard = document.querySelector(`button[data-bs-target="#editVendorModal-${vendorId}"]`).closest('.col-md-6');
-                vendorCard.style.animation = 'slideIn 0.3s ease-out reverse';
-                setTimeout(() => vendorCard.remove(), 300);
+                const triggerBtn = document.querySelector(`button[data-bs-target="#editVendorModal-${vendorId}"]`);
+                const vendorCard = triggerBtn ? triggerBtn.closest('.vendor-card') : null;
+                if (vendorCard) {
+                    vendorCard.style.animation = 'slideIn 0.3s ease-out reverse';
+                    setTimeout(() => vendorCard.remove(), 300);
+                } else {
+                    setTimeout(() => location.reload(), 500);
+                }
             })
             .catch(error => {
                 console.error('Error:', error);
