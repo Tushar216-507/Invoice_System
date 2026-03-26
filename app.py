@@ -922,7 +922,29 @@ class WhatsAppNotificationService:
             logger.error(f"Error sending WhatsApp to {vendor_name}: {e}")
             return False
 
-
+    def send_to_internal_users(self, vendor_name: str, invoice_number: str,
+                                invoice_cleared_date: str, internal_numbers: list) -> int:
+        """
+        Send WhatsApp notification to multiple internal users when invoice is cleared.
+        Returns count of successfully sent messages.
+        """
+        sent_count = 0
+        for mobile_no in internal_numbers:
+            try:
+                result = self.send_invoice_cleared_notification(
+                    vendor_name=vendor_name,
+                    invoice_number=invoice_number,
+                    invoice_cleared_date=invoice_cleared_date,
+                    mobile_no=str(mobile_no)
+                )
+                if result:
+                    sent_count += 1
+                    logger.info(f"Internal WhatsApp sent to {mobile_no} for invoice {invoice_number}")
+                else:
+                    logger.warning(f"Internal WhatsApp failed for {mobile_no}")
+            except Exception as e:
+                logger.error(f"Error sending internal WhatsApp to {mobile_no}: {e}")
+        return sent_count
 # Initialize WhatsApp service
 whatsapp_service = WhatsAppNotificationService()
 
@@ -967,6 +989,7 @@ class EmailNotificationService:
 
     def _send(self, email: str, template_id: str, subject: str, template_attr: dict) -> bool:
         """Core method — builds payload and POSTs to DICE email endpoint"""
+        logger.info(f"DICE email payload >>> template_id={template_id} | template_attr={template_attr}")
         if not self.enabled:
             logger.info("DICE email notifications are disabled")
             return False
@@ -1051,7 +1074,7 @@ class EmailNotificationService:
             subject=f"Invoice System: Invoice #{invoice_number} Cleared",
             template_attr={
                 "invoice_number": invoice_number,
-                "vendor_name": vendor,
+                "vendor": vendor,
                 "total_amount": str(total_amount),
                 "date_received": str(date_received),
                 "invoice_date": str(invoice_date),
@@ -2758,24 +2781,25 @@ def edit_invoice(id):
             #----------------------------------------------------------------
             email_sent = False
             whatsapp_sent = False
-            try:
-                recipients = os.getenv('VENDOR_ADDED_RECIPIENTS', '').split(',')
-                for recipient in [r.strip() for r in recipients if r.strip()]:
-                    email_service.send_invoice_cleared(
-                        email=recipient,
-                        invoice_number=invoice_number,
-                        vendor=vendor,
-                        total_amount=total_amount,
-                        date_received=date_received,
-                        invoice_date=invoice['invoice_date'],
-                        invoice_cleared_date=invoice_cleared_date,
-                        cleared_by=current_user.name
-                    )
-                email_sent = True
-                log_activity(f'Email sent: invoice {invoice_number} for {vendor} cleared')
-            except Exception as e:
-                logger.error(f"Failed to send invoice cleared email: {e}")
-                email_sent = False
+            if invoice_cleared == 'Yes':
+                try:
+                    recipients = os.getenv('VENDOR_ADDED_RECIPIENTS', '').split(',')
+                    for recipient in [r.strip() for r in recipients if r.strip()]:
+                        email_service.send_invoice_cleared(
+                            email=recipient,
+                            invoice_number=invoice_number,
+                            vendor=vendor,
+                            total_amount=total_amount,
+                            date_received=date_received,
+                            invoice_date=invoice['invoice_date'],
+                            invoice_cleared_date=invoice_cleared_date,
+                            cleared_by=current_user.name
+                        )
+                    email_sent = True
+                    log_activity(f'Email sent: invoice {invoice_number} for {vendor} cleared')
+                except Exception as e:
+                    logger.error(f"Failed to send invoice cleared email: {e}")
+                    email_sent = False
 
             #----------------------------------------------------------------
             # Sending WhatsApp notification to vendor when invoice is cleared
@@ -2795,7 +2819,19 @@ def edit_invoice(id):
 
                     else:
                         formatted_date = datetime.now().strftime('%d-%m-%Y')
-
+                    
+                    internal_numbers = [n.strip() for n in os.getenv('WHATSAPP_INTERNAL_NUMBERS', '').split(',') if n.strip()]
+                    if internal_numbers:
+                        internal_sent = whatsapp_service.send_to_internal_users(
+                            vendor_name=vendor,
+                            invoice_number=invoice_number,
+                            invoice_cleared_date=formatted_date,
+                            internal_numbers=internal_numbers
+                        )
+                        logger.info(f"Internal WhatsApp sent to {internal_sent}/{len(internal_numbers)} users for invoice {invoice_number}")
+                        log_activity(f"Internal WhatsApp sent to {internal_sent}/{len(internal_numbers)} users for invoice {invoice_number}")
+                    else:
+                        logger.warning("No internal WhatsApp numbers configured in WHATSAPP_INTERNAL_NUMBERS")
                     # Send Whatsapp notification
                     whatsapp_sent = whatsapp_service.send_invoice_cleared_notification(
                         vendor_name=vendor,
@@ -3204,7 +3240,7 @@ def vendor_import_confirm():
         return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/edit_vendor/<int:id>', methods=['POST'])
-@superadmin_required
+@login_required
 def edit_vendor(id):
     """Edit existing vendor details"""
     conn = get_db_connection()
@@ -4561,6 +4597,70 @@ def handle_exception(e):
         flash("An error occurred. Please try again.")
         return redirect(url_for('index'))
     
+@app.route('/vendor/export')
+@login_required
+def export_vendors():
+    department = request.args.get('department', '')
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    status = request.args.get('status', 'All')
+
+    if department and status != 'All':
+        cursor.execute("""
+            SELECT vendor_name, vendor_address, PAN, GSTIN, POC, POC_number, POC_email,
+                shortforms_of_vendors, vendor_status, department, description
+            FROM vendors
+            WHERE department = %s AND vendor_status = %s AND deleted_at IS NULL
+            ORDER BY vendor_name
+        """, (department, status))
+    elif department and status == 'All':
+        cursor.execute("""
+            SELECT vendor_name, vendor_address, PAN, GSTIN, POC, POC_number, POC_email,
+                shortforms_of_vendors, vendor_status, department, description
+            FROM vendors
+            WHERE department = %s AND deleted_at IS NULL
+            ORDER BY vendor_name
+        """, (department,))
+    elif not department and status != 'All':
+        cursor.execute("""
+            SELECT vendor_name, vendor_address, PAN, GSTIN, POC, POC_number, POC_email,
+                shortforms_of_vendors, vendor_status, department, description
+            FROM vendors
+            WHERE vendor_status = %s AND deleted_at IS NULL
+            ORDER BY department, vendor_name
+        """, (status,))
+    else:
+        cursor.execute("""
+            SELECT vendor_name, vendor_address, PAN, GSTIN, POC, POC_number, POC_email,
+                shortforms_of_vendors, vendor_status, department, description
+            FROM vendors
+            WHERE deleted_at IS NULL
+            ORDER BY department, vendor_name
+        """)
+
+    vendors = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    df = pd.DataFrame(vendors)
+    df.columns = ['Vendor Name', 'Address', 'PAN', 'GSTIN', 'POC', 'POC Number', 'POC Email',
+              'Short Name', 'Status', 'Department', 'Description']
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Vendors')
+
+        ws = writer.sheets['Vendors']
+        for col in ws.columns:
+            max_len = max((len(str(cell.value)) for cell in col if cell.value), default=10)
+            ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 50)
+
+    output.seek(0)
+    filename = f"vendors_{department or 'all'}_{status}.xlsx"
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     as_attachment=True, download_name=filename)
+
 @app.route('/api/total_logs_count')
 @login_required
 def get_total_logs_count():

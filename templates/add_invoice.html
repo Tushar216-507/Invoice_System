@@ -2,6 +2,7 @@
 {% block content %}
     <!-- Add Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
 
     <!-- Custom Styles -->
     <style>
@@ -47,6 +48,15 @@
             font-weight: 600;
             font-size: 15px;
             letter-spacing: 0.3px;
+        }
+        .select2-container--default .select2-selection--single {
+            height: 38px;
+            border-radius: 8px;
+            border: 1px solid #ced4da;
+            padding: 4px 8px;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 36px;
         }
     </style>
 
@@ -103,7 +113,7 @@
             
                         <div class="mb-3">
                             <label for="invoice_number" class="form-label">Invoice Number:</label>
-                            <input type="text" id="invoice_number" name="invoice_number" class="form-control" value="{{ form_data.invoice_number if form_data else '' }}" minlength="10" maxlength="10" pattern="[0-9]{10}" title="Please enter exactly 10 digits">
+                            <input type="text" id="invoice_number" name="invoice_number" class="form-control" value="{{ form_data.invoice_number if form_data else '' }}">
                         </div>
             
                         <!-- Purchase Order Approved -->
@@ -185,11 +195,11 @@
                         <div class="form-group">
                             <label for="msme">MSME</label><br>
                             <div class="form-check form-check-inline">
-                                <input type="radio" id="msme_yes" name="msme" value="Yes" {% if form_data and form_data.msme == 'Yes' %}checked{% endif %}>
+                                <input type="radio" id="msme_yes" name="msme" value="Yes" {% if form_data and form_data.msme == 'Yes' %}checked{% endif %} required>
                                 <label for="msme_yes">Yes</label><br>
                             </div>
                             <div class="form-check form-check-inline">
-                                <input type="radio" id="msme_no" name="msme" value="No" {% if form_data and form_data.msme == 'No' %}checked{% endif %}>
+                                <input type="radio" id="msme_no" name="msme" value="No" {% if form_data and form_data.msme == 'No' %}checked{% endif %} required>
                                 <label for="msme_no">No</label>
                             </div>
                         </div>
@@ -333,8 +343,14 @@
                 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
                 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.min.js"></script>
                 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+                <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
                 <script>
                     $(document).ready(function() {
+                        $('#vendor').select2({
+                            placeholder: "Search or select a vendor",
+                            allowClear: true,
+                            width: '100%'
+                        });
                         // Toggle Cleared Date visibility based on 'Invoice Cleared' selection
                         $('input[name="invoice_cleared"]').change(function() {
                             if ($(this).val() === 'Yes') {

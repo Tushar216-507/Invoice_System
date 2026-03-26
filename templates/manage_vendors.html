@@ -374,6 +374,9 @@
                   ⬆ Import Data
               </button>
               {% endif %}
+              <button class="add-card-btn" style="background-color:#2e86c1;" data-bs-toggle="modal" data-bs-target="#exportVendorModal">
+                  ⬇ Export Data
+              </a>
               <button class="add-card-btn" data-bs-toggle="modal" data-bs-target="#addVendorModal">
                   + Add Vendor
               </button>
@@ -934,6 +937,31 @@
         {% endfor %}
     </div>
     {% endif %}
+    <!-- Export Vendor Modal -->
+<div class="modal fade" id="exportVendorModal" tabindex="-1">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">⬇ Export Vendors</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3" style="font-size:0.9rem;">Select which vendors to export:</p>
+                <div class="d-grid gap-2">
+                    <a href="/vendor/export?department={{ selected_department | urlencode }}&status=All"
+                       class="btn btn-outline-secondary">📋 All Vendors</a>
+                    <a href="/vendor/export?department={{ selected_department | urlencode }}&status=Active"
+                       class="btn btn-outline-success">✅ Active Vendors</a>
+                    <a href="/vendor/export?department={{ selected_department | urlencode }}&status=Inactive"
+                       class="btn btn-outline-warning">⏸ Inactive Vendors</a>
+                    <a href="/vendor/export?department={{ selected_department | urlencode }}&status=Blacklisted"
+                       class="btn btn-outline-danger">🚫 Blacklisted Vendors</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Add Vendor Modal -->
 <div class="modal fade" id="addVendorModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
