@@ -835,7 +835,7 @@
 
 <!-- Floating Chat Button -->
 <!-- ================= CHATBOT ================= -->
-
+{% if current_user.role == 'superadmin' %}
 <!-- Floating Chat Button with YOUR IMAGE -->
 <div id="chat-fab" onclick="toggleChat()">
   <img class="bot-icon-img" src="{{ url_for('static', filename='images/invoice_chatbot.png') }}" alt="Chatbot">
@@ -876,6 +876,7 @@
     <button id="send-btn" style="display:none;">➤</button>
   </div>
 </div>
+{% endif %}
 
 </div>
 
@@ -1096,7 +1097,9 @@
   }
 </script>
 
+{% if current_user.role == 'superadmin' %}
 <script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
+{% endif %}
 <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
 
 <!-- ================= VENDOR GROUPED BAR CHART SCRIPT ================= -->

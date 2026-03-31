@@ -144,6 +144,27 @@ limiter = Limiter(
     storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://")
 )
 
+def chatbot_superadmin_required(f):
+    @wraps(f)
+    @login_required
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return jsonify({
+                "success": False,
+                "response": "Authentication required.",
+                "error": True
+            }), 401
+
+        if current_user.role != "superadmin":
+            return jsonify({
+                "success": False,
+                "response": "Chatbot access is restricted to superadmins.",
+                "error": True
+            }), 403
+
+        return f(*args, **kwargs)
+    return decorated
+
 def get_tag1_monthly_trends(selected_fy, trend_tag=None):
     """
     Get monthly spending trends for Tag1 categories
@@ -710,7 +731,7 @@ def generate_po_pdf_flask(data):
 # CHATBOT ENDPOINT (Legacy - redirects to new chatbot)
 #----------------------------------------------------------------------------
 @app.route('/api/chat', methods=['POST'])
-@login_required
+@chatbot_superadmin_required
 def chat_endpoint():
     """
     Legacy chatbot endpoint - uses new chatbot from backend.new_chatbot
@@ -1110,7 +1131,7 @@ email_service = EmailNotificationService()
 # CHATBOT ENDPOINT - Using new hybrid chatbot  
 #=======================================================================================
 @app.route('/api/chat/v2', methods=['POST'])
-@login_required
+@chatbot_superadmin_required
 def chat_v2_endpoint():
     """
     Enhanced chatbot endpoint with hybrid disambiguation
