@@ -146,11 +146,9 @@ class InvoiceChatbot {
       const data = await response.json();
       this.removeTypingIndicator();
 
-      // ALWAYS save conversation_id if present (needed for clarification flow!)
-      if (data.needs_clarification) {
+      // Preserve conversation context for both normal follow-ups and clarifications.
+      if (data.conversation_id) {
         this.conversationId = data.conversation_id;
-      }else{
-        this.conversationId = null;
       }
 
       if (data.needs_clarification) {

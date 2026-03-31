@@ -119,10 +119,6 @@ class SmartSQL:
             
             # Log SQL for debugging
             logger.info(f"Generated SQL: {sql}")
-            print(f"\n{'='*60}")
-            print(f"📝 GENERATED SQL:")
-            print(f"{sql}")
-            print(f"{'='*60}\n")
             
             return {
                 "sql": sql,

@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 import os
 import string
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 import random
 from dotenv import load_dotenv
 from flask_mail import Mail, Message
@@ -17,7 +18,8 @@ try:
 except ImportError:
     pisa = None
     XHTML2PDF_AVAILABLE = False
-    print("Warning: xhtml2pdf not available - PDF generation will be disabled")
+    import warnings
+    warnings.warn("xhtml2pdf not available - PDF generation will be disabled")
 from num2words import num2words
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment
@@ -138,13 +140,8 @@ csrf = CSRFProtect(app)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["200 per day", "50 per hour"]
-)
-
-limiter = Limiter(
-    get_remote_address,
-    app=app,
-    default_limits=["200 per day", "50 per hour"]
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://")
 )
 
 def get_tag1_monthly_trends(selected_fy, trend_tag=None):
@@ -379,9 +376,15 @@ def refresh_session():
 from datetime import timedelta
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
-app.config["SESSION_COOKIE_SECURE"] = False  # ⚠️ Change to True in HTTPS
+app.config["SESSION_COOKIE_SECURE"] = os.getenv(
+    "SESSION_COOKIE_SECURE",
+    "True" if os.getenv("FLASK_ENV") == "production" else "False"
+) == "True"
 app.config["REMEMBER_COOKIE_DURATION"] = timedelta(days=7)
 app.config["REMEMBER_COOKIE_REFRESH_EACH_REQUEST"] = True
+app.config["REMEMBER_COOKIE_HTTPONLY"] = True
+app.config["REMEMBER_COOKIE_SAMESITE"] = "Strict"
+app.config["REMEMBER_COOKIE_SECURE"] = app.config["SESSION_COOKIE_SECURE"]
 app.config["SESSION_PROTECTION"] = "strong"
 
 app.permanent_session_lifetime = timedelta(hours=4)
@@ -851,12 +854,14 @@ class WhatsAppNotificationService:
         token = self._get_token()
         if not token:
             logger.error("Failed to get DICE API token - WhatsApp notification failed")
-            return 
-        
-        tushar_mobile_number = 9136736171
+            return False
+
         try:
             # Clean mobile number (remove spaces, dashes, etc.)
-            clean_mobile = ''.join(filter(str.isdigit, str(tushar_mobile_number)))
+            clean_mobile = ''.join(filter(str.isdigit, str(mobile_no)))
+            if not clean_mobile:
+                logger.warning(f"Invalid mobile number for vendor {vendor_name} - WhatsApp notification skipped")
+                return False
             
             # Ensure 10 digits for Indian numbers
             if len(clean_mobile) == 10:
@@ -1235,7 +1240,7 @@ def generate_po_number(vendor_name,po_date):
         return po_number
         
     except Exception as e:
-        print(f"Error generating PO number: {e}")
+        logger.error(f"Error generating PO number: {e}")
         conn.close()
         return None
     
@@ -1259,7 +1264,7 @@ def generate_po_number_api():
         return jsonify({'success': True, 'po_number': po_number})
         
     except Exception as e:
-        print(f"Error in generate_po_number_api: {e}")
+        logger.error(f"Error in generate_po_number_api: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 import hashlib
@@ -1374,13 +1379,12 @@ def send_monthly_email(excel_file, start_date):
 
     recipients_str = os.getenv(
         'REPORT_EMAIL_RECIPIENTS',
-        'mihirtendulkar123@gmail.com',
-        'tushar.kadam@auxilo.com',
-        'tusharkadam1248@gmail.com',
-        # 'abhilash.pillai@auxilo.com',
-        # 'hemant.dhivar@auxilo.com'
-        )
-    recipients = [email.strip() for email in recipients_str.split(',')]
+        'mihirtendulkar123@gmail.com,tushar.kadam@auxilo.com,tusharkadam1248@gmail.com'
+    )
+    recipients = [email.strip() for email in recipients_str.split(',') if email.strip()]
+    if not recipients:
+        logger.warning("Monthly report email skipped because REPORT_EMAIL_RECIPIENTS is empty")
+        return False
     
     msg = Message(
         subject=subject,
@@ -1406,6 +1410,7 @@ Invoice Automation
     )
 
     mail.send(msg)
+    return True
 
 # User model
 class Users(db.Model,UserMixin):
@@ -1413,7 +1418,7 @@ class Users(db.Model,UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
     name = db.Column(db.String(120), nullable=False)  # Added user_name field
-    otp = db.Column(db.String(6), nullable=True)
+    otp = db.Column(db.String(64), nullable=True)
     otp_created_at = db.Column(db.DateTime, nullable=True)
     otp_attempts = db.Column(db.Integer, default=0)
     role = db.Column(db.String(50), nullable=False, default='user')
@@ -1433,10 +1438,38 @@ class ActivityLog(db.Model):
     department = db.Column(db.String(100), nullable=False, default='marketing')  # ✅ New column 
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+def ensure_database_schema():
+    """Apply lightweight schema fixes required by the current application."""
+    try:
+        otp_length = db.session.execute(
+            text("""
+                SELECT CHARACTER_MAXIMUM_LENGTH
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'users'
+                  AND COLUMN_NAME = 'otp'
+            """)
+        ).scalar()
+
+        if otp_length and otp_length < 64:
+            db.session.execute(text("ALTER TABLE users MODIFY COLUMN otp VARCHAR(64) NULL"))
+            db.session.commit()
+            logger.info("Expanded users.otp column to VARCHAR(64)")
+    except Exception as exc:
+        db.session.rollback()
+        logger.warning(f"Skipped automatic schema update: {exc}")
+
 def get_logged_in_user():
     if not current_user.is_authenticated:
         return None
     return db.session.get(Users, current_user.id)
+
+def get_actor_identity():
+    """Return the best available actor identity for audit logs."""
+    user = get_logged_in_user()
+    if not user:
+        return "Unknown", "user", None
+    return user.name or user.email or "Unknown", user.role or "user", user.email
 
 def superadmin_required(f):
     @wraps(f)
@@ -1476,9 +1509,11 @@ def log_activity(action):
     db.session.add(log)
     db.session.commit()
 
+with app.app_context():
+    ensure_database_schema()
+
 # Endpoint route to send OTP to valid users
 @app.route('/send-otp', methods=['POST'])
-@csrf.exempt
 @limiter.limit("10 per hour")
 def send_otp():
     data = request.json
@@ -1499,8 +1534,7 @@ def send_otp():
     user.otp_created_at = datetime.utcnow()
     user.otp_attempts = 0
     db.session.commit()
-    # Only for me because i doesn't receive emails form DICE api
-    print(f"OTP: {otp}")
+    logger.info(f"Generated OTP for {email}")
 
     # Send the OTP email
     try:
@@ -1519,7 +1553,6 @@ def send_otp():
 # Endpoint to check weather a valid otp is entered or not
 OTP_EXPIRY_MINUTES = 5
 @app.route('/verify-otp', methods=['POST'])
-@csrf.exempt
 @limiter.limit("5 per minute")
 def verify_otp():
     data = request.json
@@ -1557,7 +1590,9 @@ def verify_otp():
     login_user(user, remember=True)
     log_activity(f"{user.name}({user.role}) logged in")
 
-    return jsonify({'valid': True})
+    resp = make_response(jsonify({'valid': True}))
+    resp.delete_cookie("login_email")
+    return resp
 
 # Login page route
 @app.route('/')
@@ -1568,7 +1603,7 @@ def login():
 @app.route('/otp')
 def otp_page():
     # Check if the user is already logged in
-    if request.cookies.get('logged_in') == 'true':
+    if current_user.is_authenticated:
         return redirect(url_for('admin_dashboard'))
     return render_template('otp.html')
 
@@ -2257,7 +2292,7 @@ def download_excel():
 
     # Create a bytes buffer for the Excel file
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False)
 
     # Seek to the beginning of the stream
@@ -2544,9 +2579,8 @@ def add_invoice():
                         tag2=tag2
                     )
 
-                actor_role = current_user.role
-                user_name = request.cookies.get('name') or request.cookies.get('email')
-                log_activity(f"{user_name}({actor_role}) added invoice ({invoice_number}) for vendor {vendor}")
+                actor_name, actor_role, _ = get_actor_identity()
+                log_activity(f"{actor_name}({actor_role}) added invoice ({invoice_number}) for vendor {vendor}")
 
                 # Generate Excel file using openpyxl
                 #template_path = "static/excel_templates/template.xlsx"
@@ -2862,9 +2896,8 @@ def edit_invoice(id):
                 else:
                     message += (' Notifications failed')
             flash(message)
-            actor_role = current_user.role
-            user_name = request.cookies.get('name') or request.cookies.get('email')
-            log_activity(f"{user_name}({actor_role}) edited invoice ({invoice_number}) for vendor {vendor}")
+            actor_name, actor_role, _ = get_actor_identity()
+            log_activity(f"{actor_name}({actor_role}) edited invoice ({invoice_number}) for vendor {vendor}")
 
             # Skip Excel generation if invoice is cleared
             if invoice_cleared == 'Yes':
@@ -3007,7 +3040,7 @@ def delete_invoice(id):
 
     except Exception as e:
         conn.rollback()
-        print("Delete operaion error:", {e})
+        logger.error(f"Delete operation error: {e}")
         flash('Failed to delete invoice.')
 
     finally:
@@ -3586,9 +3619,8 @@ def manage_dropdowns():
             flash('Value added successfully.')
 
             #  Log the activity
-            actor_role = current_user.role
-            user_name = request.cookies.get('name') or request.cookies.get('email')
-            log_activity(f"{user_name}({actor_role}) added a new value '{value}' to the '{type_}' dropdown")
+            actor_name, actor_role, _ = get_actor_identity()
+            log_activity(f"{actor_name}({actor_role}) added a new value '{value}' to the '{type_}' dropdown")
 
     # Load all dropdowns
     cursor.execute('SELECT DISTINCT type FROM dropdown_values')
@@ -3622,9 +3654,8 @@ def delete_dropdown(id):
         conn.commit()
 
         #  Log the activity
-        role = current_user.role
-        user_name = request.cookies.get('name') or request.cookies.get('email')
-        log_activity(f"{user_name}({role}) soft-deleted the value '{value_data['value']}' from '{value_data['type']}' dropdown")
+        actor_name, role, _ = get_actor_identity()
+        log_activity(f"{actor_name}({role}) soft-deleted the value '{value_data['value']}' from '{value_data['type']}' dropdown")
 
         flash('Value disabled (soft-deleted).')
     else:
@@ -3639,10 +3670,8 @@ def delete_dropdown(id):
 @superadmin_required
 def manage_users():
     users = Users.query.all()
-    from sqlalchemy import text
     departments = db.session.execute(text('SELECT department_name FROM departments ORDER BY department_name')).fetchall()
     departments = [d[0] for d in departments]
-    user_name = request.cookies.get('name') or request.cookies.get('email')
     return render_template('manage_users.html',users=users,departments=departments)
 
 # Route to add a new user (superadmin only)
@@ -3673,8 +3702,7 @@ def add_user():
         db.session.commit()
 
         #  Log activity
-        actor_role = current_user.role
-        actor = request.cookies.get('name') or request.cookies.get('email')
+        actor, actor_role, _ = get_actor_identity()
         log_activity(f"{actor}({actor_role}) added new user: {name} ({email}) with role {role}")
 
     return redirect(url_for('manage_users'))
@@ -3686,10 +3714,9 @@ def delete_user(user_id):
     user = Users.query.get_or_404(user_id)
 
     #  Get actor BEFORE deletion
-    actor = request.cookies.get('name') or request.cookies.get('email')
+    actor, role, _ = get_actor_identity()
 
     #  Log BEFORE deletion
-    role = current_user.role
     log_activity(f"{actor}({role}) deleted user: {user.name} ({user.email})")
 
     db.session.delete(user)
@@ -3708,11 +3735,11 @@ def toggle_user_status(user_id):
     db.session.commit()
 
     # Identify actor from cookies
-    actor = request.cookies.get('name') or request.cookies.get('email')
+    actor, actor_role, _ = get_actor_identity()
 
     # Log the action
     status = "activated" if user.is_active else "deactivated"
-    log_activity(f"{actor} {status} user: {user.name} ({user.email})")
+    log_activity(f"{actor}({actor_role}) {status} user: {user.name} ({user.email})")
 
     return redirect(url_for('manage_users'))
 
@@ -3746,10 +3773,9 @@ def update_user_role(user_id):
         db.session.commit()
 
         # Identify actor from cookie
-        actor = request.cookies.get('name') or request.cookies.get('email')
+        actor, actor_role, _ = get_actor_identity()
 
         # Log the role change
-        actor_role = current_user.role
         log_activity(f"{actor}({actor_role}) changed role of user {user.name} ({user.email}) from {old_role} to {new_role}")
 
     return redirect(url_for('manage_users'))
@@ -4042,7 +4068,7 @@ def download_single_excel(id):
     df = pd.DataFrame([invoice])
 
     output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False)
 
     output.seek(0)
@@ -4319,9 +4345,7 @@ def add_po():
         })
 
     except Exception as e:
-        print("Error creating PO:", e)
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Error creating PO: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
     
 @app.route('/po/download/<int:po_id>')
@@ -4418,9 +4442,7 @@ def update_po(po_id):
         data = request.get_json()
 
         # Logged in user
-        user_email = request.cookies.get('email')
-        user_name = request.cookies.get('name')
-        role = request.cookies.get('role')
+        user_name, role, _ = get_actor_identity()
 
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
@@ -4498,7 +4520,7 @@ def update_po(po_id):
         })
 
     except Exception as e:
-        print(f"Error updating PO: {e}")
+        logger.error(f"Error updating PO: {e}")
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/po/activities')
@@ -4673,4 +4695,8 @@ def get_total_logs_count():
         return jsonify({'count': 0})
     
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(
+        host='0.0.0.0',
+        port=5000,
+        debug=os.getenv('FLASK_DEBUG', 'False') == 'True'
+    )
