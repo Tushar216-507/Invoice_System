@@ -1,0 +1,11 @@
+services:
+  chatbot:
+    build: .
+    container_name: invoice_chatbot
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    restart: always
