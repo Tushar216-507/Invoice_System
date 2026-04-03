@@ -30,6 +30,7 @@ import csv
 from io import StringIO, BytesIO
 import json   #new_import   
 from openai import OpenAI  #new_import
+from urllib.parse import quote_plus
 #Imports for PO
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.pagesizes import A4
@@ -412,6 +413,7 @@ app.permanent_session_lifetime = timedelta(hours=4)
 
 db_config = {
     'host': os.getenv('DB_HOST'),
+    'port': int(os.getenv('DB_PORT', '3306')),
     'user': os.getenv('DB_USER'),
     'password': os.getenv('DB_PASSWORD'),
     'database': os.getenv('DB_NAME')
@@ -779,7 +781,19 @@ app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS') == 'True'  # Convert stri
 app.config['MAIL_USE_SSL'] = os.getenv('MAIL_USE_SSL') == 'True'  # Convert string to boolean
 mail = Mail(app)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('SQLALCHEMY_DATABASE_URI')
+def build_sqlalchemy_database_uri():
+    user = os.getenv('DB_USER', '')
+    password = os.getenv('DB_PASSWORD', '')
+    host = os.getenv('DB_HOST', 'localhost')
+    port = os.getenv('DB_PORT', '3306')
+    database = os.getenv('DB_NAME', '')
+
+    return (
+        f"mysql+mysqlconnector://{quote_plus(user)}:{quote_plus(password)}"
+        f"@{host}:{port}/{database}"
+    )
+
+app.config['SQLALCHEMY_DATABASE_URI'] = build_sqlalchemy_database_uri()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = os.getenv('SQLALCHEMY_TRACK_MODIFICATIONS') == 'False'  # Convert string to boolean
 db = SQLAlchemy(app)
 

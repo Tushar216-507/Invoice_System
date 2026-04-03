@@ -1,4 +1,24 @@
 services:
+  db:
+    image: mysql:8.0
+    container_name: invoice_mysql
+    restart: always
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-invoice_uat_db}
+      MYSQL_USER: ${DB_USER:-invoice_app}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-invoice_app_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   chatbot:
     build: .
     container_name: invoice_chatbot
@@ -6,6 +26,15 @@ services:
       - "5000:5000"
     env_file:
       - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
     volumes:
       - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
     restart: always
+
+volumes:
+  mysql_data:

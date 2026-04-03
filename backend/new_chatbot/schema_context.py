@@ -15,7 +15,7 @@ class SchemaContextBuilder:
         "invoices": "Main invoice records with billing details, amounts, GST, approval workflow status, and payment clearance tracking",
         "purchase_orders": "Purchase order documents with vendor info, amounts, tax (CGST/SGST), and PDF attachments",
         "purchase_order_items": "Line items within purchase orders containing product descriptions, quantities, rates, and totals",
-        "vendors": "Vendor/supplier master data with contact info, GSTIN, PAN, and status",
+        "vendors": "Vendor/supplier master data with contact info, address, GSTIN, PAN, status, and soft-delete support",
         "activity_log": "Audit trail of all user actions in the system"
     }
     
@@ -35,9 +35,9 @@ class SchemaContextBuilder:
             "isd": "Whether vendor is ISD registered (Yes/No)",
             "hod_values": "HOD (Head of Department) approval status/values",
             "ceo_values": "CEO approval status/values",
-            "reviewed_by": "Email of user who reviewed this invoice",
-            "approved_by": "Email of user who approved this invoice",
-            "created_by": "Email of user who created this invoice",
+            "reviewed_by": "Full name of the user who reviewed this invoice",
+            "approved_by": "Full name of the user who approved this invoice",
+            "created_by": "Full name of the user who created this invoice",
             "tag1": "Custom tag for categorization (e.g., Urgent, Priority)",
             "tag2": "Secondary custom tag",
             "po_approved": "Whether the linked PO is approved (Yes/No)",
@@ -56,9 +56,7 @@ class SchemaContextBuilder:
             "pdf_path": "File path to uploaded PO PDF",
             "approved_by": "User ID who approved the PO",
             "reviewed_by": "User ID who reviewed the PO",
-            "created_by": "User ID who created the PO",
-            "vendor_address": "Vendor address for this PO",
-            "deleted_at": "Soft delete timestamp"
+            "created_by": "User ID who created the PO"
         },
         "purchase_order_items": {
             "po_id": "Foreign key to purchase_orders table",
@@ -72,16 +70,19 @@ class SchemaContextBuilder:
             "vendor_status": "Active or Inactive status",
             "department": "Department this vendor is associated with",
             "shortforms_of_vendors": "Abbreviated name or alias",
+            "vendor_address": "Primary address used for invoices and purchase orders",
             "PAN": "Permanent Account Number (tax ID)",
             "GSTIN": "GST Identification Number",
             "POC": "Point of Contact name",
             "POC_number": "Contact phone number",
-            "POC_email": "Contact email address"
+            "POC_email": "Contact email address",
+            "description": "Free-form vendor notes or business description",
+            "deleted_at": "Soft delete timestamp (NULL if vendor is active in the UI)"
         },
         "users": {
             "email": "User's email (used for login)",
             "name": "Full name of the user",
-            "role": "User role (user, admin, hod, ceo)",
+            "role": "User role (for example user, admin, superadmin, approver)",
             "is_active": "Whether account is active (1) or disabled (0)",
             "department": "Department the user belongs to",
             "otp": "One-time password for authentication",
@@ -100,9 +101,8 @@ class SchemaContextBuilder:
     BUSINESS_RULES = [
         "Invoices with invoice_cleared='Yes' are considered paid/cleared",
         "Invoices with invoice_cleared='No' are pending payment",
-        "ONLY invoices and purchase_orders tables have deleted_at column for soft delete",
-        "Vendors table does NOT have deleted_at - use vendor_status='Active' for active vendors",
-        "Active vendors have vendor_status='Active'",
+        "Invoices and vendors are soft-deleted by setting deleted_at; active rows usually have deleted_at IS NULL",
+        "Vendors use vendor_status='Active' or 'Inactive' for business status, separate from deleted_at",
         "For pending approval: hod_values or ceo_values may be NULL or empty",
         "Invoice workflow: created -> reviewed -> approved -> cleared",
         "PO workflow: created -> reviewed -> approved",
