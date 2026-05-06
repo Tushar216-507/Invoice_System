@@ -32,13 +32,14 @@ import json   #new_import
 from openai import OpenAI  #new_import
 from urllib.parse import quote_plus
 #Imports for PO
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, KeepTogether
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 from utils import amount_to_words
+from reportlab.pdfgen import canvas
 #-------------------------For logo in PO------------------------------------------
 from reportlab.lib.units import inch
 from reportlab.lib.pagesizes import A4
@@ -141,7 +142,7 @@ csrf = CSRFProtect(app)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=["200 per day", "75 per hour"],
     storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://")
 )
 
@@ -459,8 +460,8 @@ def add_page_layout(canvas, doc):
 
         canvas.saveState()
 
-        x = A4[0] - desired_width_pt - 10     # 35 px right margin
-        y = A4[1] - desired_height_pt + 40   # 35 px top margin
+        x = A4[0] - desired_width_pt - 10     
+        y = A4[1] - desired_height_pt - 20     
 
         canvas.drawImage(
             logo,
@@ -470,34 +471,74 @@ def add_page_layout(canvas, doc):
             preserveAspectRatio=True,
             mask='auto'
         )
+        canvas.restoreState()
 
     except Exception as e:
         logger.error(f"Logo rendering error: {e}")
 
-    # ================= FOOTER =================
+def draw_last_page_footer(canvas, doc):
     footer_html = """
 <b>Regd. and Corporate Office</b><br/>
 <b>Auxilo Finserve Private Limited</b><br/>
 Office No. 552, 6th Floor, Kalpataru Square,<br/>
 Kondivita Road, Andheri East, Mumbai 400059, Maharashtra, India<br/>
-✆: +91 22 62463333 &nbsp;&nbsp; ✉: support@auxilo.com &nbsp;&nbsp; 🌐:www.auxilo.com<br/>
+Tel: +91 22 62463333 &nbsp;&nbsp;
+Email: support@auxilo.com &nbsp;&nbsp;
+Web: www.auxilo.com<br/>
 <b>CIN No:</b> U65990MH2016PTC282516
 """
 
     style = ParagraphStyle(
-        name="FooterStyle",
-        fontName="Times-Roman",
-        fontSize=8,
-        leading=10,
+        name="LastFooterStyle",
+        fontName="Helvetica",
+        fontSize=7,
+        leading=9,
         alignment=TA_LEFT,
         textColor=colors.black
     )
 
     para = Paragraph(footer_html, style)
 
-    # X , Y , Width , Height
-    frame = Frame(40, -30, 500, 120, showBoundary=0)
+    frame = Frame(
+        40,
+        18,
+        380,        # wider — full usable page width
+        70,         # taller — enough for 6 lines + padding
+        leftPadding=3,
+        rightPadding=3,
+        topPadding=3,
+        bottomPadding=3,
+        showBoundary=0
+    )
+
     frame.addFromList([para], canvas)
+
+class FooterCanvas(canvas.Canvas):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.pages = []
+
+    def showPage(self):
+        self.pages.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        total_pages = len(self.pages)  # Don't append here — showPage() already captured all pages
+
+        for page_num, page in enumerate(self.pages, start=1):
+            self.__dict__.update(page)
+
+            # Draw logo on every page
+            add_page_layout(self, None)
+
+            # Draw footer ONLY on last page
+            if page_num == total_pages:
+                draw_last_page_footer(self, None)
+
+            canvas.Canvas.showPage(self)
+
+        canvas.Canvas.save(self)
+
 # Function for Pdf layout for PO
 def generate_po_pdf_flask(data):
     """
@@ -517,7 +558,7 @@ def generate_po_pdf_flask(data):
         leftMargin=0.5*inch,
         rightMargin=0.5*inch,
         topMargin=2*inch,
-        bottomMargin=0.5*inch
+        bottomMargin=1.3*inch
     )
 
     # ==================== STYLES ====================
@@ -554,7 +595,7 @@ def generate_po_pdf_flask(data):
     all_rows = []
 
     # ROW 1: TITLE (PURCHASE ORDER) - Spans all columns
-    all_rows.append([Paragraph("PURCHASE ORDER", title_style), "", "", "", "", "", ""])
+    all_rows.append([Paragraph("PURCHASE ORDER", title_style), "", "", "", "", "", "", ""])
 
     # ROW 2: Header (To, Billing Address, PO-NO)
     # Left: Vendor Address only (no vendor name)
@@ -581,6 +622,7 @@ def generate_po_pdf_flask(data):
             normal_style
         ),
         "",  # Merge
+        "",
         ""   # Merge
     ])
 
@@ -591,44 +633,84 @@ def generate_po_pdf_flask(data):
         "",  # Merge with description
         Paragraph("<b>Qty</b>", bold_style),
         Paragraph("<b>Rate</b>", bold_style),
-        Paragraph("<b>CGST<br/>9%</b>", bold_style),
-        Paragraph("<b>SGST<br/>9%</b>", bold_style),
+        Paragraph("<b>Amount<br/>(INR)</b>", bold_style),
+        "",
         Paragraph("<b>Total<br/>(INR)</b>", bold_style)
     ])
 
     # ROW 4+: Item rows
     if data["items"]:
         for i, item in enumerate(data["items"], 1):
-            qty_str = str(int(item['qty'])) if item['qty'] == int(item['qty']) else f"{item['qty']:.1f}"
-            
+            qty_val = float(item.get('qty', 0))
+            qty_str = str(int(qty_val)) if qty_val.is_integer() else f"{qty_val:.1f}"
+            qty = float(item.get('qty', 0))
+            rate = float(item.get('rate', 0))
+            base = round(qty * rate, 2)
+
             all_rows.append([
                 Paragraph(f"{i}.", normal_style),
                 Paragraph(item["description"], normal_style),
-                "",  # Merge
+                "",
                 Paragraph(qty_str, normal_style),
-                Paragraph(f"{item['rate']:,.2f}", normal_style),
-                Paragraph(f"{item['cgst']:,.2f}", normal_style),
-                Paragraph(f"{item['sgst']:,.2f}", normal_style),
-                Paragraph(f"{item['total']:,.2f}", normal_style)
+                Paragraph(f"{rate:,.4f}".rstrip('0').rstrip('.'), normal_style),
+                Paragraph(f"{base:,.2f}", normal_style),
+                "",
+                Paragraph(f"{base:,.2f}", normal_style)
             ])
 
-    # ROW: Total
+    # ===== CALCULATIONS =====
+    subtotal = sum(
+        float(item.get('rate', 0)) * float(item.get('qty', 0))
+        for item in data["items"]
+    )
+
+    apply_gst = data.get("apply_gst", True)
+
+    if apply_gst:
+        gst_total = round(subtotal * 0.18, 2)
+    else:
+        gst_total = 0
+
+    grand_total = round(subtotal + gst_total, 2)
+    # ADD THIS LINE BELOW 
+    display_total = round(grand_total) if data.get("apply_round_off", False) else grand_total
+    # ===== SUBTOTAL ROW =====
+    subtotal_row_index = len(all_rows)
+    all_rows.append([
+        "", "", "", "", "",
+        Paragraph("<b>Subtotal</b>", bold_style),
+        "",
+        Paragraph(f"{subtotal:,.2f}", normal_style)
+    ])
+
+    # ===== GST ROW =====
+    gst_row_index = len(all_rows)
+    apply_gst = data.get("apply_gst", True)
+    if apply_gst:
+        gst_label = "GST 18%"
+    else:
+        gst_label = "GST 0%"
+    all_rows.append([
+        "", "", "", "", "",
+        Paragraph(f"<b>{gst_label}</b>", bold_style),
+        "",
+        Paragraph(f"{gst_total:,.2f}", normal_style)
+    ])
+
+    # ===== FINAL TOTAL ROW =====
     total_row_index = len(all_rows)
     all_rows.append([
+        "", "", "", "", "",
+        Paragraph("<b>Total (INR)</b>", bold_style),
         "",
-        Paragraph("<b>Total</b>", bold_style),
-        "",
-        "",
-        "",
-        "",
-        "",
-        Paragraph(f"<b>{data['grand_total']:,.2f}</b>", bold_style)
+        Paragraph(f"<b>{display_total:,.2f}</b>", bold_style)
     ])
 
     # ROW: Amount in words
     words_row_index = len(all_rows)
+    data['amount_words'] = amount_to_words(display_total)
     all_rows.append([
-    Paragraph(f"<b>In Words:</b> {data.get('amount_words', '')}", normal_style),
+    Paragraph(f"<b>In Words:</b> {data['amount_words']}", normal_style),
     "", "", "", "", "", "", ""
     ])
 
@@ -673,8 +755,29 @@ def generate_po_pdf_flask(data):
     # ==================== CREATE THE MAIN TABLE ====================
     main_table = Table(
         all_rows,
-        colWidths=[0.4*inch, 1.4*inch, 1.4*inch, 0.5*inch, 1.0*inch, 0.8*inch, 0.8*inch, 1.0*inch]
+        colWidths=[
+            0.4*inch,
+            1.4*inch,
+            1.4*inch,
+            0.5*inch,
+            1.0*inch,
+            0.8*inch,
+            0.8*inch,
+            1.0*inch
+        ],
+        splitByRow=1
     )
+    main_table._argW = [
+        0.4*inch,
+        1.4*inch,
+        1.4*inch,
+        0.5*inch,
+        1.0*inch,
+        0.8*inch,
+        0.8*inch,
+        1.0*inch
+    ]
+    
 
     # ==================== APPLY ALL STYLES ====================
     style_commands = [
@@ -694,14 +797,25 @@ def generate_po_pdf_flask(data):
         # ROW 3: Items header
         ('SPAN', (1,2), (2,2)),  # Product Description spans 2 columns
         ('ALIGN', (0,2), (-1,2), 'CENTER'),
+        ('SPAN', (5,2), (6,2)),
         
         # Items data rows alignment
         ('ALIGN', (0,3), (0,-1), 'LEFT'),      # Sr No left
-        ('ALIGN', (3,3), (7,-1), 'CENTER'),    # Numbers center
+        ('ALIGN', (3,3), (7, subtotal_row_index-1), 'CENTER'),   # Numbers center
     ]
 
     # Total row span
-    style_commands.append(('SPAN', (1, total_row_index), (6, total_row_index)))
+    # Subtotal span
+    style_commands.append(('SPAN', (0, subtotal_row_index), (4, subtotal_row_index)))
+    style_commands.append(('SPAN', (5, subtotal_row_index), (6, subtotal_row_index)))
+
+    # GST span
+    style_commands.append(('SPAN', (0, gst_row_index), (4, gst_row_index)))
+    style_commands.append(('SPAN', (5, gst_row_index), (6, gst_row_index)))
+
+    # Total span
+    style_commands.append(('SPAN', (0, total_row_index), (4, total_row_index)))
+    style_commands.append(('SPAN', (5, total_row_index), (6, total_row_index)))
     
     # Words row span
     style_commands.append(('SPAN', (0, words_row_index), (7, words_row_index)))
@@ -722,11 +836,13 @@ def generate_po_pdf_flask(data):
     main_table.setStyle(TableStyle(style_commands))
 
     # Build PDF with just the one table
+    elements = [main_table]
+
     doc.build(
-    [main_table],
-    onFirstPage=add_page_layout,
-    onLaterPages=add_page_layout
+        elements,
+        canvasmaker = FooterCanvas
     )
+
     return file_path
 
 #------------------------------- ----------------------------------------
@@ -784,9 +900,9 @@ mail = Mail(app)
 def build_sqlalchemy_database_uri():
     user = os.getenv('DB_USER', '')
     password = os.getenv('DB_PASSWORD', '')
-    host = os.getenv('DB_HOST', 'localhost')
+    host = os.getenv('DB_HOST', 'host.docker.internal')
     port = os.getenv('DB_PORT', '3306')
-    database = os.getenv('DB_NAME', '')
+    database = os.getenv('DB_NAME', 'invoices_v2')
 
     return (
         f"mysql+mysqlconnector://{quote_plus(user)}:{quote_plus(password)}"
@@ -1223,7 +1339,7 @@ def generate_po_number(vendor_name,po_date):
     try:
         # Get vendor shortform
         cursor.execute(
-            "SELECT shortforms_of_vendors FROM invoice_uat_db.vendors WHERE vendor_name = %s",
+            "SELECT shortforms_of_vendors FROM invoices_v2.vendors WHERE vendor_name = %s",
             (vendor_name,)
         )
         vendor = cursor.fetchone()
@@ -1254,7 +1370,7 @@ def generate_po_number(vendor_name,po_date):
         
         cursor.execute("""
             SELECT po_number 
-            FROM invoice_uat_db.purchase_orders 
+            FROM invoices_v2.purchase_orders 
             WHERE po_number LIKE %s
             ORDER BY po_number DESC
             LIMIT 1
@@ -2417,7 +2533,7 @@ def add_invoice():
         invoice_number = request.form['invoice_number']
         date_submission = request.form['date_submission']
         approved_by = request.form.get('approved_by')
-        created_by = user.name
+        created_by = request.form.get("created_by").strip()
         po_approved = request.form['po_approved']
         po_number = request.form['po_number']
         agreement_signed = request.form['agreement_signed']
@@ -2661,10 +2777,7 @@ def add_invoice():
 
                 # ws['D11'] = date_submission
 
-                if ws['D47'].value:  # Check if there's already a value in the cell
-                    ws['D47'] = f"{ws['D47'].value} {created_by}"
-                else:
-                    ws['D47'] = sanitize_excel(created_by)
+                ws['D47'] = f"Name: {created_by}"
 
                 # For approved_by
                 if ws['D41'].value:
@@ -2786,9 +2899,10 @@ def edit_invoice(id):
         agreement_signed_date = request.form.get('agreement_signed_date')  # Optional
         po_expiry_date = po_expiry_date if po_expiry_date else None
         agreement_signed_date = agreement_signed_date if agreement_signed_date else None
-        created_by = invoice['created_by']
+        created_by = request.form.get("created_by").strip()
         invoice_cleared = request.form['invoice_cleared']
 
+        created_by = request.form.get("created_by")
         if invoice_cleared == 'Yes':
             invoice_cleared_date = request.form.get('invoice_cleared_date') or date.today()
            
@@ -2979,10 +3093,7 @@ def edit_invoice(id):
             else:
                 ws['A25'] = f"Marketing Expenses ({tag1})"
 
-            if ws['D47'].value:  # Check if there's already a value in the cell
-                ws['D47'] = f"{ws['D47'].value} {created_by}"
-            else:
-                ws['D47'] = created_by
+            ws['D47'] = f"{created_by}"
 
             # For approved_by
             if ws['D41'].value:
@@ -4136,10 +4247,10 @@ def po_list():
         v.vendor_name,
         u_approved.name as approved_by_name,
         u_reviewed.name as reviewed_by_name
-    FROM invoice_uat_db.purchase_orders po
-    LEFT JOIN invoice_uat_db.vendors v ON po.vendor_id = v.id
-    LEFT JOIN invoice_uat_db.users u_approved ON po.approved_by = u_approved.id
-    LEFT JOIN invoice_uat_db.users u_reviewed ON po.reviewed_by = u_reviewed.id
+    FROM invoices_v2.purchase_orders po
+    LEFT JOIN invoices_v2.vendors v ON po.vendor_id = v.id
+    LEFT JOIN invoices_v2.users u_approved ON po.approved_by = u_approved.id
+    LEFT JOIN invoices_v2.users u_reviewed ON po.reviewed_by = u_reviewed.id
     ORDER BY po.created_at DESC
 """)
 
@@ -4148,7 +4259,7 @@ def po_list():
     cursor.execute("""
         SELECT id, vendor_name, vendor_address, PAN, GSTIN, 
                POC, POC_number, POC_email,department 
-        FROM invoice_uat_db.vendors
+        FROM invoices_v2.vendors
     """)
     vendors = cursor.fetchall()
     
@@ -4169,6 +4280,8 @@ def add_po():
     """Create a new Purchase Order"""
     try:
         data = request.get_json()
+        apply_gst = data.get('apply_gst', True)
+        apply_round_off = data.get('apply_round_off', False)
 
         # Logged in user
         user_email = current_user.email
@@ -4188,7 +4301,7 @@ def add_po():
         # Check duplicate PO number only if provided
         if po_number:
             cursor.execute(
-                'SELECT id FROM invoice_uat_db.purchase_orders WHERE po_number = %s',
+                'SELECT id FROM invoices_v2.purchase_orders WHERE po_number = %s',
                 (po_number,)
             )
             if cursor.fetchone():
@@ -4204,14 +4317,14 @@ def add_po():
 
         # Vendor handling
         cursor.execute(
-            'SELECT id FROM invoice_uat_db.vendors WHERE vendor_name = %s',
+            'SELECT id FROM invoices_v2.vendors WHERE vendor_name = %s',
             (data['vendor_name'],)
         )
         vendor = cursor.fetchone()
 
         if not vendor:
             cursor.execute(
-                'INSERT INTO invoice_uat_db.vendors (vendor_name, vendor_address) VALUES (%s, %s)',
+                'INSERT INTO invoices_v2.vendors (vendor_name, vendor_address) VALUES (%s, %s)',
                 (data['vendor_name'], data['vendor_address'])
             )
             vendor_id = cursor.lastrowid
@@ -4220,14 +4333,14 @@ def add_po():
 
         # User_PO mapping
         cursor.execute(
-            'SELECT id FROM invoice_uat_db.users WHERE email = %s',
+            'SELECT id FROM invoices_v2.users WHERE email = %s',
             (user_email,)
         )
         user_po = cursor.fetchone()
 
         if not user_po:
             cursor.execute(
-                'INSERT INTO invoice_uat_db.users (email, name, role) VALUES (%s, %s, %s)',
+                'INSERT INTO invoices_v2.users (email, name, role) VALUES (%s, %s, %s)',
                 (user_email, user_name or user_email.split("@")[0], role or "user")
             )
             created_by_id = cursor.lastrowid
@@ -4237,14 +4350,14 @@ def add_po():
         # Default approver
         default_email = 'abhilash.pillai@auxilo.com'
         cursor.execute(
-            'SELECT id FROM invoice_uat_db.users WHERE email = %s',
+            'SELECT id FROM invoices_v2.users WHERE email = %s',
             (default_email,)
         )
         default_user = cursor.fetchone()
 
         if not default_user:
             cursor.execute(
-                'INSERT INTO invoice_uat_db.users (email, name, role) VALUES (%s, %s, %s)',
+                'INSERT INTO invoices_v2.users (email, name, role) VALUES (%s, %s, %s)',
                 (default_email, 'Abhilash Pillai', 'approver')
             )
             default_user_id = cursor.lastrowid
@@ -4255,10 +4368,18 @@ def add_po():
         total_amount = total_cgst = total_sgst = grand_total = 0
 
         for item in data['items']:
-            total = float(item['total'])
-            base = total / 1.18
-            cgst = base * 0.09
-            sgst = base * 0.09
+            qty = float(item['qty'])
+            rate = float(item['rate'])
+
+            base = qty * rate
+            if apply_gst:
+                cgst = round(base * 0.09, 2)
+                sgst = round(base * 0.09, 2)
+            else:
+                cgst = 0
+                sgst = 0
+
+            total = round(base + cgst + sgst, 2)
 
             total_amount += base
             total_cgst += cgst
@@ -4286,7 +4407,7 @@ def add_po():
             conn.autocommit = False
             
             cursor.execute("""
-                INSERT INTO invoice_uat_db.purchase_orders (
+                INSERT INTO invoices_v2.purchase_orders (
                     po_number, vendor_id, po_date, total_amount, cgst_amount, sgst_amount,
                     grand_total, pdf_path, approved_by, reviewed_by, created_by
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -4301,13 +4422,18 @@ def add_po():
 
             # Insert PO items
             for item in data['items']:
-                total = float(item['total'])
-                base = total / 1.18
+                qty = float(item.get('qty', 0))
+                rate = float(item.get('rate', 0))
+
+                base = qty * rate
+                cgst = round(base * 0.09, 2)
+                sgst = round(base * 0.09, 2)
+                total = round(base + cgst + sgst, 2)
                 qty = float(item.get('qty', 0)) if item.get('qty') else 0
                 rate = float(item.get('rate', 0)) if item.get('rate') else (base / qty if qty else 0)
 
                 cursor.execute("""
-                    INSERT INTO invoice_uat_db.purchase_order_items (
+                    INSERT INTO invoices_v2.purchase_order_items (
                         po_id, product_description, quantity, rate, line_total
                     ) VALUES (%s, %s, %s, %s, %s)
                 """, (po_id, item['description'], qty, rate, total))
@@ -4326,24 +4452,29 @@ def add_po():
 
         # PDF Data
         pdf_data = {
-            "po_number": po_number or "N/A",  # Show N/A if no PO number
+            "po_number": po_number or "N/A",
             "date": po_date_raw or date.today().strftime('%d/%m/%Y'),
             "vendor_address": data['vendor_address'],
             "items": [],
             "grand_total": grand_total,
-            "amount_words": amount_words
+            "amount_words": amount_words,
+            "apply_gst": apply_gst,
+            "apply_round_off": data.get("apply_round_off", False),   # ← add this
         }
 
         for item in data['items']:
-            total = float(item['total'])
-            base = total / 1.18
-            cgst = base * 0.09
-            sgst = base * 0.09
+            qty = float(item.get('qty', 0))
+            rate = float(item.get('rate', 0))
+
+            base = qty * rate
+            cgst = round(base * 0.09, 2)
+            sgst = round(base * 0.09, 2)
+            total = round(base + cgst + sgst, 2)
             qty = float(item.get('qty', 0)) if item.get('qty') else 0
             rate = float(item.get('rate', 0)) if item.get('rate') else (base / qty if qty else 0)
 
             pdf_data["items"].append({
-                "description": item["description"],
+                "description": item.get("description") or item.get("product_description", ""),
                 "qty": qty,
                 "rate": rate,
                 "cgst": cgst,
@@ -4356,7 +4487,7 @@ def add_po():
         conn2 = get_db_connection()
         cursor2 = conn2.cursor()
         cursor2.execute(
-            "UPDATE invoice_uat_db.purchase_orders SET pdf_path = %s WHERE id = %s",
+            "UPDATE invoices_v2.purchase_orders SET pdf_path = %s WHERE id = %s",
             (pdf_path, po_id)
         )
         conn2.commit()
@@ -4391,7 +4522,7 @@ def download_po_pdf(po_id):
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute(
-        'SELECT po_number, pdf_path FROM invoice_uat_db.purchase_orders WHERE id = %s',
+        'SELECT po_number, pdf_path FROM invoices_v2.purchase_orders WHERE id = %s',
         (po_id,)
     )
     po = cursor.fetchone()
@@ -4475,6 +4606,8 @@ def update_po(po_id):
     """Update existing Purchase Order"""
     try:
         data = request.get_json()
+        apply_gst = data.get('apply_gst', True)
+        apply_round_off = data.get('apply_round_off', False)  
 
         # Logged in user
         user_name, role, _ = get_actor_identity()
@@ -4484,7 +4617,7 @@ def update_po(po_id):
 
         # Get PO number
         cursor.execute(
-            'SELECT po_number FROM invoice_uat_db.purchase_orders WHERE id = %s',
+            'SELECT po_number FROM invoices_v2.purchase_orders WHERE id = %s',
             (po_id,)
         )
         po = cursor.fetchone()
@@ -4497,7 +4630,7 @@ def update_po(po_id):
 
         # Delete existing items
         cursor.execute(
-            'DELETE FROM invoice_uat_db.purchase_order_items WHERE po_id = %s',
+            'DELETE FROM invoices_v2.purchase_order_items WHERE po_id = %s',
             (po_id,)
         )
 
@@ -4505,10 +4638,17 @@ def update_po(po_id):
         total_amount = total_cgst = total_sgst = grand_total = 0
 
         for item in data['items']:
-            total = float(item['total'])
-            base = total / 1.18
-            cgst = base * 0.09
-            sgst = base * 0.09
+            qty = float(item.get('qty', 0))
+            rate = float(item.get('rate', 0))
+
+            base = qty * rate
+            if apply_gst:
+                cgst = round(base * 0.09, 2)
+                sgst = round(base * 0.09, 2)
+            else:
+                cgst = 0
+                sgst = 0
+            total = round(base + cgst + sgst, 2)
 
             total_amount += base
             total_cgst += cgst
@@ -4524,14 +4664,14 @@ def update_po(po_id):
             )
 
             cursor.execute("""
-                INSERT INTO invoice_uat_db.purchase_order_items 
+                INSERT INTO invoices_v2.purchase_order_items 
                 (po_id, product_description, quantity, rate, line_total)
                 VALUES (%s, %s, %s, %s, %s)
             """, (po_id, item['description'], qty, rate, total))
 
         # Update PO totals
         cursor.execute("""
-            UPDATE invoice_uat_db.purchase_orders
+            UPDATE invoices_v2.purchase_orders
             SET total_amount = %s,
                 cgst_amount = %s,
                 sgst_amount = %s,
@@ -4568,7 +4708,7 @@ def po_activities():
     # Get activities from last 30 days
     cursor.execute("""
         SELECT id, user_email, po_number, action, action_timestamp
-        FROM invoice_uat_db.activity_of_po
+        FROM invoices_v2.activity_of_po
         WHERE action_timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)
         ORDER BY action_timestamp DESC
         LIMIT 100
@@ -4592,13 +4732,13 @@ def delete_po(po_id):
         cursor = conn.cursor()
 
         # Get PO number before delete
-        cursor.execute("SELECT po_number FROM invoice_uat_db.purchase_orders WHERE id=%s",
+        cursor.execute("SELECT po_number FROM invoices_v2.purchase_orders WHERE id=%s",
                        (po_id,))
         po = cursor.fetchone()
 
         # Delete items and PO
-        cursor.execute("DELETE FROM invoice_uat_db.purchase_order_items WHERE po_id=%s",(po_id,))
-        cursor.execute("DELETE FROM invoice_uat_db.purchase_orders WHERE id=%s",(po_id,))
+        cursor.execute("DELETE FROM invoices_v2.purchase_order_items WHERE po_id=%s",(po_id,))
+        cursor.execute("DELETE FROM invoices_v2.purchase_orders WHERE id=%s",(po_id,))
         conn.commit()
         conn.close()
 
@@ -4732,6 +4872,7 @@ def get_total_logs_count():
 if __name__ == '__main__':
     app.run(
         host='0.0.0.0',
-        port=5000,
+        # port=3003,
+        port=5001,
         debug=os.getenv('FLASK_DEBUG', 'False') == 'True'
     )

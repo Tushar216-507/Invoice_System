@@ -1,8 +1,8 @@
-CREATE DATABASE IF NOT EXISTS invoice_uat_db
+CREATE DATABASE IF NOT EXISTS invoices_v2
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE invoice_uat_db;
+USE invoices_v2;
 
 CREATE TABLE IF NOT EXISTS departments (
   id INT AUTO_INCREMENT PRIMARY KEY,

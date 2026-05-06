@@ -6,7 +6,7 @@
 
     <!-- Custom Styles -->
     <style>
-        body {
+        body {  
             background-color: #f8f9fa;
         }
         h1 {
@@ -259,7 +259,7 @@
                             <label for="created_by" class="form-label">Prepared By:</label>
                             <select id="created_by" name="created_by" class="form-control" required>
                                 {% for value in created_by_values %}
-                                    <option value="{{ value }}" {% if form_data and form_data.created_by == value %}selected{% endif %}>{{ value }}</option>
+                                    <option value="{{ value|trim }}" {% if form_data and form_data.created_by == value %}selected{% endif %}>{{ value }}</option>
                                 {% endfor %}
                             </select>
                         </div>

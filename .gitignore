@@ -1,14 +1,9 @@
-<<<<<<< HEAD
 logs/
 *.log
-=======
->>>>>>> 4f8a89711b1b7038408a0a8c688341dba8bc5156
 __pycache__/
 *.pyc
 .env
 venv/
-<<<<<<< HEAD
-=======
 .log
->>>>>>> 4f8a89711b1b7038408a0a8c688341dba8bc5156
+generated_pdfs/
 

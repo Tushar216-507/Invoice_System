@@ -21,6 +21,22 @@
 {% endif %}
 {% endwith %}
 
+<div class="row mb-3">
+    <div class="col-md-3">
+        <label>From Date</label>
+        <input type="date" id="fromDate" class="form-control">
+    </div>
+
+    <div class="col-md-3">
+        <label>To Date</label>
+        <input type="date" id="toDate" class="form-control">
+    </div>
+
+    <div class="col-md-2 d-flex align-items-end">
+        <button class="btn btn-secondary w-100" id="clearDateFilter">Clear</button>
+    </div>
+</div>
+
 <div class="table-responsive shadow-lg p-3 mb-4 bg-body rounded">
 <table id="poTable" class="table table-striped table-hover table-bordered align-middle">
     <thead class="table-dark">
@@ -28,7 +44,7 @@
             <th>PO Number</th>
             <th>PO Date</th>
             <th>Vendor Name</th>
-            <th>Grand Total ()</th>
+            <th>Grand Total (₹)</th>
             <th>Approved By</th>
             <th>Reviewed By</th>
             <th>Created At</th>
@@ -130,6 +146,20 @@
 </div>
 </div>
 
+<div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" id="apply_gst" checked>
+    <label class="form-check-label">
+        Apply GST (18%)
+    </label>
+</div>
+
+<div class="form-check mb-3">
+    <input class="form-check-input" type="checkbox" id="apply_round_off">
+    <label class="form-check-label">
+        Round Off Total
+    </label>
+</div>
+
 <div class="card">
 <div class="card-body">
 
@@ -141,7 +171,7 @@
     <th>Description</th>
     <th>Qty</th>
     <th>Rate</th>
-    <th>Total ()</th>
+    <th>Total (₹)</th>
     <th>Action</th>
 </tr>
 </thead>
@@ -255,16 +285,48 @@ initializeVendorMap(vendorData);
 
 // Initialize DataTable
 $(document).ready(function() {
-    $('#poTable').DataTable({
+
+    const table = $('#poTable').DataTable({
         "pageLength": 10,
         "lengthMenu": [[10, 25, 50, -1], [10, 25, 50, "All"]],
         "order": [[6, "desc"]],
-
-        "searching": false,
+        "searching": true,
         "columnDefs": [
             { "orderable": false, "targets": 7 }
         ]
     });
+
+    // 🔥 CUSTOM DATE FILTER
+    $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+        let min = document.getElementById('fromDate').value;
+        let max = document.getElementById('toDate').value;
+
+        let poDate = data[1]; // 👉 PO Date column (index 1)
+
+        if (!poDate) return true;
+
+        // Convert DD/MM/YYYY → YYYY-MM-DD
+        let parts = poDate.split('/');
+        let formatted = `${parts[2]}-${parts[1]}-${parts[0]}`;
+
+        if (min && formatted < min) return false;
+        if (max && formatted > max) return false;
+
+        return true;
+    });
+
+    // 🔥 TRIGGER FILTER
+    $('#fromDate, #toDate').on('change', function() {
+        table.draw();
+    });
+
+    // 🔥 CLEAR BUTTON
+    $('#clearDateFilter').on('click', function() {
+        $('#fromDate').val('');
+        $('#toDate').val('');
+        table.draw();
+    });
+
 });
 </script>
 {% endblock %}

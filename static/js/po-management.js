@@ -190,18 +190,18 @@ function addItemRow() {
   if (!itemsBody) return;
   
   itemsBody.insertAdjacentHTML("beforeend", `
-    <tr>
-      <td><input class="form-control" required></td>
-      <td><input class="form-control" type="number" step="0.01"></td>
-      <td><input class="form-control" type="number" step="0.01"></td>
-      <td><input class="form-control" type="number" step="0.01" required></td>
-      <td>
-        <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">
-          ❌
-        </button>
-      </td>
-    </tr>
-  `);
+  <tr>
+    <td><input class="form-control" required></td>
+    <td><input class="form-control qty" type="number" step="0.01" oninput="calculateRowTotal(this)"></td>
+    <td><input class="form-control rate" type="number" step="any" oninput="calculateRowTotal(this)"></td>
+    <td><input class="form-control total" type="number" step="0.01" readonly></td>
+    <td>
+      <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">
+        ❌
+      </button>
+    </td>
+  </tr>
+`);
 }
 
 function addEditItemRow() {
@@ -212,7 +212,7 @@ function addEditItemRow() {
     <tr>
       <td><input class="form-control" required></td>
       <td><input class="form-control" type="number" step="0.01"></td>
-      <td><input class="form-control" type="number" step="0.01"></td>
+      <td><input class="form-control" type="number" step="any"></td>
       <td><input class="form-control" type="number" step="0.01" required></td>
       <td>
         <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">
@@ -280,10 +280,10 @@ async function editPO(id) {
       data.items.forEach(item => {
         tbody.insertAdjacentHTML("beforeend", `
           <tr>
-            <td><input class="form-control" value="${item.product_description || ''}" required></td>
-            <td><input class="form-control" type="number" step="0.01" value="${item.quantity || ''}"></td>
-            <td><input class="form-control" type="number" step="0.01" value="${item.rate || ''}"></td>
-            <td><input class="form-control" type="number" step="0.01" value="${item.line_total || ''}" required></td>
+            <td><input class="form-control" value="${item.description || item.product_description || ''}" required></td>
+            <td><input class="form-control qty" type="number" step="0.01" value="${item.quantity || ''}" oninput="calculateRowTotal(this)"></td>
+            <td><input class="form-control rate" type="number" step="any" value="${item.rate || ''}" oninput="calculateRowTotal(this)"></td>
+            <td><input class="form-control total" type="number" step="0.01" value="${item.line_total || ''}" readonly></td>
             <td>
               <button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">
                 ✕
@@ -292,6 +292,7 @@ async function editPO(id) {
           </tr>
         `);
       });
+      console.log(data.items);
     } else {
       // Add at least one empty row
       addEditItemRow();
@@ -322,14 +323,15 @@ function setupEditPOFormSubmission() {
       let inputs = row.querySelectorAll("input");
       items.push({
         description: inputs[0].value,
-        qty: parseFloat(inputs[1].value) || null,
-        rate: parseFloat(inputs[2].value) || null,
-        total: parseFloat(inputs[3].value)
+        qty: parseFloat(inputs[1].value),
+        rate: parseFloat(inputs[2].value)
       });
     });
     
     const payload = {
-      items: items
+        items: items,
+        apply_gst: document.getElementById("apply_gst")?.checked,
+        apply_round_off: document.getElementById("apply_round_off")?.checked ?? false
     };
     
     try {
@@ -380,7 +382,6 @@ function setupPOFormSubmission() {
         description: inputs[0].value,
         qty: parseFloat(inputs[1].value) || null,
         rate: parseFloat(inputs[2].value) || null,
-        total: parseFloat(inputs[3].value)
       });
     });
     
@@ -391,6 +392,8 @@ function setupPOFormSubmission() {
       vendor_address: document.getElementById('vendor_address')?.value,
       items
     };
+    payload.apply_gst = document.getElementById("apply_gst")?.checked;
+    payload.apply_round_off = document.getElementById("apply_round_off")?.checked ?? false;
     
     if (isMandatory) {
       payload.po_number = document.getElementById("add_po_number")?.value;
@@ -479,3 +482,14 @@ document.addEventListener('DOMContentLoaded', function() {
   
   console.log('✅ PO management initialized');
 });
+
+function calculateRowTotal(input) {
+    const row = input.closest('tr');
+
+    const qty = parseFloat(row.querySelector('.qty')?.value) || 0;
+    const rate = parseFloat(row.querySelector('.rate')?.value) || 0;
+
+    const total = qty * rate;
+
+    row.querySelector('.total').value = total.toFixed(2);
+}

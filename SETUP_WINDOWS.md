@@ -83,11 +83,11 @@ pip install groq openai python-dotenv
 3. Create the database:
 
 ```sql
-CREATE DATABASE invoice_uat_db;
+CREATE DATABASE invoices_v2;
 ```
 
 4. Import your data:
-   - Right-click on `invoice_uat_db`  **Table Data Import Wizard**
+   - Right-click on `invoices_v2`  **Table Data Import Wizard**
    - Or import from SQL dump file if you have one
 
 ---
@@ -101,7 +101,7 @@ Create a file named `.env` in the `invoice_updated` folder with this content:
 DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=your_mysql_password_here
-DB_NAME=invoice_uat_db
+DB_NAME=invoices_v2
 DB_PORT=3306
 
 # Groq API Key (get from https://console.groq.com)

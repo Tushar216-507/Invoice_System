@@ -73,7 +73,7 @@ Flask app (`invoice_updated/app.py`)
          |-- Response formatter
          |
          v
-      MySQL database (`invoice_uat_db`)
+      MySQL database (`invoices_v2`)
 ```
 
 The same codebase supports local MySQL during development and hosted MySQL environments through `.env` configuration.
@@ -241,7 +241,7 @@ Configuration is loaded from `.env` using `python-dotenv`.
 
 ## 6. Database Schema
 
-The application uses MySQL with the primary database name `invoice_uat_db`.
+The application uses MySQL with the primary database name `invoices_v2`.
 
 Core tables referenced in the app and chatbot:
 
