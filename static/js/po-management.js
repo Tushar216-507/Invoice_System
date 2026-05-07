@@ -145,7 +145,8 @@ function togglePOSection() {
     poFields.style.display = "flex";
     if (poNumberInput){
       poNumberInput.required = true;
-      poNumberInput.closest('.col-md-6').style.display = "block";
+      const colShow = poNumberInput.closest('.col-md-6');
+      if (colShow) colShow.style.display = "block";
     }
     if (poDateInput) poDateInput.required = true;
   } else {
@@ -155,7 +156,8 @@ function togglePOSection() {
       poNumberInput.value = "";
       poNumberInput.required = false;
       poNumberInput.readOnly = false;
-      poNumberInput.closest('.col-md-6').style.display = "none";
+      const colHide = poNumberInput.closest('.col-md-6');
+      if (colHide) colHide.style.display = "none";  
     }
     if (poDateInput) {
       poDateInput.required = true;
@@ -163,6 +165,30 @@ function togglePOSection() {
   }
   
   updateVendorLockState();
+}
+
+function togglePONumberField(isRequired) {
+  const poNumberInput = document.getElementById("add_po_number");
+  const poNumberGroup = poNumberInput?.closest('.input-group');
+  const poNumberLabel = poNumberGroup?.previousElementSibling;
+
+  if (!poNumberInput) return;
+
+  if (isRequired) {
+    poNumberInput.placeholder = "Auto-generated after selecting vendor & date";
+    poNumberInput.readOnly = true;
+    poNumberInput.style.background = "#f8f9fa";
+    poNumberInput.style.color = "#6c757d";
+    // Re-trigger generation if vendor+date already selected
+    const vendor = document.getElementById("vendor_name")?.value;
+    if (vendor) fillVendorDetails(vendor);
+  } else {
+    poNumberInput.value = "";
+    poNumberInput.readOnly = false;
+    poNumberInput.style.background = "";
+    poNumberInput.style.color = "";
+    poNumberInput.placeholder = "Enter PO number manually";
+  }
 }
 
 function updateVendorLockState() {
@@ -330,8 +356,8 @@ function setupEditPOFormSubmission() {
     
     const payload = {
         items: items,
-        apply_gst: document.getElementById("apply_gst")?.checked,
-        apply_round_off: document.getElementById("apply_round_off")?.checked ?? false
+        apply_gst: document.getElementById("edit_apply_gst")?.checked ?? true,
+        apply_round_off: document.getElementById("edit_apply_round_off")?.checked ?? false
     };
     
     try {
@@ -396,7 +422,8 @@ function setupPOFormSubmission() {
     payload.apply_round_off = document.getElementById("apply_round_off")?.checked ?? false;
     
     if (isMandatory) {
-      payload.po_number = document.getElementById("add_po_number")?.value;
+      const poNumRequired = document.getElementById("po_number_required")?.checked ?? true;
+      payload.po_number = poNumRequired ? document.getElementById("add_po_number")?.value : null;
       const poDate = document.getElementById('po_date')?.value;
       payload.po_date = poDate ? poDate.split("-").reverse().join("/") : null;
     } else {
