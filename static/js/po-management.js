@@ -357,7 +357,8 @@ function setupEditPOFormSubmission() {
     const payload = {
         items: items,
         apply_gst: document.getElementById("edit_apply_gst")?.checked ?? true,
-        apply_round_off: document.getElementById("edit_apply_round_off")?.checked ?? false
+        apply_round_off: document.getElementById("edit_apply_round_off")?.checked ?? false,
+        esign_requested: document.getElementById('esign_requested')?.checked ?? false,
     };
     
     try {
@@ -420,7 +421,7 @@ function setupPOFormSubmission() {
     };
     payload.apply_gst = document.getElementById("apply_gst")?.checked;
     payload.apply_round_off = document.getElementById("apply_round_off")?.checked ?? false;
-    
+    payload.esign_requested = document.getElementById('esign_requested')?.checked ?? false;    
     if (isMandatory) {
       const poNumRequired = document.getElementById("po_number_required")?.checked ?? true;
       payload.po_number = poNumRequired ? document.getElementById("add_po_number")?.value : null;

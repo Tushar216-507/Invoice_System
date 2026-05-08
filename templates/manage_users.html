@@ -259,6 +259,7 @@
                             <option value="user">User</option>
                             <option value="admin">Admin</option>
                             <option value="superadmin">Super Admin</option>
+                            <option value="hod">HOD</option>
                         </select>
                     </div>
                     <div class="mb-3">
@@ -304,6 +305,7 @@
                             <option value="user" {% if user.role == 'user' %}selected{% endif %}>User</option>
                             <option value="admin" {% if user.role == 'admin' %}selected{% endif %}>Admin</option>
                             <option value="superadmin" {% if user.role == 'superadmin' %}selected{% endif %}>Super Admin</option>
+                            <option value="hod" {% if user.role == 'hod' %}selected{% endif %}>HOD</option>
                         </select>
                     </div>
                     <div class="mb-3">

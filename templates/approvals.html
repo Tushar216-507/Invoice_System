@@ -29,7 +29,13 @@
                 Vendor Requests <span class="badge bg-danger ms-2">{{ requests|length }}</span>
             </a>
         </li>
-        <!-- Future tabs can be added here -->
+         {% if current_user.role == 'hod' %}
+        <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#esign-approvals">
+                eSign Approvals <span class="badge bg-warning text-dark ms-2">{{ esign_requests|length }}</span>
+            </a>
+        </li>
+        {% endif %}
     </ul>
 
     <div class="tab-content">
@@ -76,6 +82,41 @@
             {% endif %}
 
         </div>
+        <!-- eSign section -->
+                {% if current_user.role == 'hod' %}
+        <div class="tab-pane fade" id="esign-approvals">
+            {% if esign_requests %}
+                {% for po in esign_requests %}
+                <div class="card approval-card mb-3">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <h5 class="card-title">{{ po.po_number or 'N/A' }}</h5>
+                                <p class="mb-1"><strong>Vendor:</strong> {{ po.vendor_name }}</p>
+                                <p class="mb-1"><strong>Total:</strong> ₹{{ "%.2f"|format(po.grand_total or 0) }}</p>
+                                <p class="mb-1"><strong>Created By:</strong> {{ po.created_by_name }}</p>
+                                <p class="mb-0"><strong>Requested At:</strong> {{ po.esign_requested_at }}</p>
+                            </div>
+                            <div class="col-md-4 text-end d-flex flex-column justify-content-center gap-2">
+                                <button class="btn btn-success btn-sm" onclick="approveEsign({{ po.id }})">
+                                    ✓ Approve eSign
+                                </button>
+                                <button class="btn btn-danger btn-sm" onclick="rejectEsign({{ po.id }})">
+                                    ✗ Reject eSign
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="alert alert-info">
+                    <h5>✓ No Pending eSign Requests</h5>
+                    <p>All PO eSign requests have been processed.</p>
+                </div>
+            {% endif %}
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -116,5 +157,39 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/approvals.js') }}"></script>
+
+<script>
+async function approveEsign(poId) {
+    if (!confirm('Approve eSign for this PO?')) return;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const res = await fetch(`/po/esign/approve/${poId}`, { 
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken } 
+    });
+    const data = await res.json();
+    if (data.success) {
+        alert('eSign approved successfully.');
+        location.reload();
+    } else {
+        alert('Error: ' + data.message);
+    }
+}
+
+async function rejectEsign(poId) {
+    if (!confirm('Reject eSign for this PO?')) return;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const res = await fetch(`/po/esign/reject/${poId}`, { 
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken } 
+    });
+    const data = await res.json();
+    if (data.success) {
+        alert('eSign rejected.');
+        location.reload();
+    } else {
+        alert('Error: ' + data.message);
+    }
+}
+</script>
 
 {% endblock %}

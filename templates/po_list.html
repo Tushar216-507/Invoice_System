@@ -48,6 +48,7 @@
             <th>Approved By</th>
             <th>Reviewed By</th>
             <th>Created At</th>
+            <th>eSign</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -62,6 +63,18 @@
             <td>{{ po.approved_by_name or 'N/A' }}</td>
             <td>{{ po.reviewed_by_name or 'N/A' }}</td>
             <td>{{ po.created_at }}</td>
+
+            <td>
+                {% if po.esign_status == 'pending' %}
+                    <span class="badge bg-warning text-dark">Pending</span>
+                {% elif po.esign_status == 'approved' %}
+                    <span class="badge bg-success">Approved</span>
+                {% elif po.esign_status == 'rejected' %}
+                    <span class="badge bg-danger">Rejected</span>
+                {% else %}
+                    <span class="badge bg-secondary">N/A</span>
+                {% endif %}
+            </td>
 
             <td>
                 <button class="btn btn-warning btn-sm"
@@ -168,6 +181,10 @@
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" role="switch" id="apply_round_off">
                         <label class="form-check-label" for="apply_round_off">Round Off</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" role="switch" id="esign_requested">
+                        <label class="form-check-label" for="esign_requested">eSign Approval</label>
                     </div>
                 </div>
 
@@ -333,7 +350,7 @@ $(document).ready(function() {
         "order": [],
         "searching": true,
         "columnDefs": [
-            { "orderable": false, "targets": 7 }
+            { "orderable": false, "targets": 8 }
         ]
     });
     

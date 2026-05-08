@@ -415,7 +415,8 @@ body {
             <span class="menu-icon">📝</span>
             <span class="menu-text">Activity Logs</span>
         </a>
-        
+        {% endif %}
+        {% if current_user.role == 'hod' or current_user.role == 'superadmin' %}
         <a href="{{ url_for('approvals') }}"
         class="{% if request.endpoint == 'approvals' %}active{% endif %}"
         data-tooltip="Approvals">

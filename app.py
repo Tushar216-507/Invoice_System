@@ -142,7 +142,7 @@ csrf = CSRFProtect(app)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["200 per day", "75 per hour"],
+    default_limits=["200 per day", "100 per hour"],
     storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://")
 )
 
@@ -736,7 +736,8 @@ def generate_po_pdf_flask(data):
         f"<b>PAN No.</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {data.get('pan_no', 'AAXCS7051B')}<br/><br/><br/>"
         f"<b>GSTI No</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: 27AAXCS7051B1Z2<br/><br/><br/>"
         f"<b>Signature</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:<br/><br/>"
-        f"<b>Name</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: Benoy Joseph<br/>"
+        + (f'<img src="static/signatures/dummy_esign_invoice_system.png" width="80" height="35"/><br/><br/>' if data.get('esign_approved') else "<br/><br/>")
+        + f"<b>Name</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: Benoy Joseph<br/>"
         f"<b>Designation</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: Head – Marketing<br/><br/><br/>"
         f"<b>Date</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {data['date']}<br/><br/>"
         f"<b>Place</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: Mumbai"
@@ -3529,8 +3530,8 @@ def generate_shortform(vendor_name):
 @app.route('/approvals')
 @login_required
 def approvals():
-    """Display all pending approvals (superadmin only)"""
-    if current_user.role != 'superadmin':
+    """Display all pending approvals (superadmin and hod)"""
+    if current_user.role not in ('superadmin', 'hod'):
         flash("You don't have permission to access this page")
         return redirect(url_for('index'))
     
@@ -3542,12 +3543,33 @@ def approvals():
         WHERE status = 'pending'
         ORDER BY request_date DESC
     """)
-    
     requests = cursor.fetchall()
-    conn.close()
-    
-    return render_template('approvals.html', requests=requests)
 
+    cursor.execute("""
+        SELECT 
+            po.id,
+            po.po_number,
+            po.po_date,
+            po.grand_total,
+            po.esign_requested_at,
+            v.vendor_name,
+            u.name as created_by_name
+        FROM invoices_v2.purchase_orders po
+        LEFT JOIN invoices_v2.vendors v ON po.vendor_id = v.id
+        LEFT JOIN invoices_v2.users u ON po.created_by = u.id
+        WHERE po.esign_status = 'pending'
+        ORDER BY po.esign_requested_at DESC
+    """)
+    esign_requests = cursor.fetchall()
+    conn.close()
+
+    for po in esign_requests:
+        if po['po_date']:
+            po['po_date'] = po['po_date'].strftime('%d/%m/%Y')
+        if po['esign_requested_at']:
+            po['esign_requested_at'] = po['esign_requested_at'].strftime('%d/%m/%Y %H:%M')
+
+    return render_template('approvals.html', requests=requests, esign_requests=esign_requests)
 
 @app.route('/api/pending-count')
 @login_required
@@ -3562,6 +3584,83 @@ def pending_count():
     
     return jsonify({'count': count})
 
+@app.route('/po/esign/approve/<int:po_id>',methods = ['POST'])
+@login_required
+def esign_approve(po_id):
+    if current_user.role != 'hod':
+        return jsonify({'success': False, 'message': 'Unauthorized'}), 403
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Update status
+    cursor.execute("""
+        UPDATE invoices_v2.purchase_orders 
+        SET esign_status = 'approved',
+            esign_responded_at = %s,
+            esign_responded_by = %s
+        WHERE id = %s
+    """, (datetime.now(timezone.utc), current_user.name, po_id))
+    conn.commit()
+
+    # Fetch PO data to regenerate PDF
+    cursor.execute("""
+        SELECT po.*, v.vendor_address
+        FROM invoices_v2.purchase_orders po
+        LEFT JOIN invoices_v2.vendors v ON po.vendor_id = v.id
+        WHERE po.id = %s
+    """, (po_id,))
+    po = cursor.fetchone()
+
+    cursor.execute("""
+        SELECT product_description as description, quantity as qty, rate
+        FROM invoices_v2.purchase_order_items WHERE po_id = %s
+    """, (po_id,))
+    items = cursor.fetchall()
+    conn.close()
+
+    # Regenerate PDF with signature
+    pdf_data = {
+        "po_number": po['po_number'] or "N/A",
+        "date": po['po_date'].strftime('%d/%m/%Y') if po['po_date'] else date.today().strftime('%d/%m/%Y'),
+        "vendor_address": po['vendor_address'] or '',
+        "items": [{"description": i['description'], "qty": float(i['qty']), "rate": float(i['rate'])} for i in items],
+        "grand_total": float(po['grand_total']),
+        "amount_words": amount_to_words(float(po['grand_total'])),
+        "apply_gst": bool(po.get('apply_gst', True)),
+        "apply_round_off": bool(po.get('apply_round_off', False)),
+        "esign_approved": True,
+        "esign_responded_by": current_user.name,
+        "esign_responded_at": datetime.now().strftime('%d/%m/%Y'),
+    }
+
+    generate_po_pdf_flask(pdf_data)
+    return jsonify({'success': True})
+
+@app.route('/po/esign/reject/<int:po_id>',methods = ['POST'])
+@login_required
+def esign_rejected(po_id):
+    """eSign Rejected"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    if current_user.role != 'hod':
+        return jsonify({
+            'Success': False,
+            'message': 'Unauthorised'
+        }), 403
+    
+    cursor.execute("""
+        UPDATE invoices_v2.purchase_orders 
+        SET esign_status = 'rejected',
+            esign_responded_at = %s,
+            esign_responded_by = %s
+        WHERE id = %s
+    """, (datetime.now(timezone.utc), current_user.name,po_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True})
 
 @app.route('/vendor/request-details/<int:request_id>')
 @login_required
@@ -3837,7 +3936,7 @@ def add_user():
         flash('Invalid email address','error')
         return redirect(url_for('manage_users'))
     
-    if role not in ['user', 'admin', 'superadmin']:
+    if role not in ['user', 'admin', 'superadmin','hod']:
         flash('Invalid role','error')
         return redirect(url_for('manage_users'))
 
@@ -4244,6 +4343,7 @@ def po_list():
         po.po_date,
         po.grand_total,
         po.created_at,
+        po.esign_status,
         v.vendor_name,
         u_approved.name as approved_by_name,
         u_reviewed.name as reviewed_by_name
@@ -4294,7 +4394,6 @@ def add_po():
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # ✅ Handle optional PO number and date
         po_number = data.get('po_number')
         po_date_raw = data.get('po_date')
         
@@ -4396,7 +4495,6 @@ def add_po():
             pdf_filename = f"{po_number.replace('/', '_')}.pdf"
         else:
             # Use timestamp for POs without numbers
-            from datetime import datetime
             pdf_filename = f"PO_NoNumber_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
         
         pdf_path = f"generated_pdfs/{pdf_filename}"
@@ -4405,17 +4503,23 @@ def add_po():
         try:
             # Start transaction
             conn.autocommit = False
+
+            esign_requested = data.get('esign_requested', False)
+            esign_status = 'pending' if esign_requested else 'not_requested'
+            esign_requested_at = datetime.now(timezone.utc) if esign_requested else None
             
             cursor.execute("""
                 INSERT INTO invoices_v2.purchase_orders (
                     po_number, vendor_id, po_date, total_amount, cgst_amount, sgst_amount,
-                    grand_total, pdf_path, approved_by, reviewed_by, created_by
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    grand_total, pdf_path, approved_by, reviewed_by, created_by,
+                    esign_requested,esign_status,esign_requested_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 po_number, vendor_id, po_date_db, total_amount, total_cgst,
                 total_sgst, grand_total,
                 pdf_path,
-                default_user_id, default_user_id, created_by_id
+                default_user_id, default_user_id, created_by_id,
+                esign_requested,esign_status,esign_requested_at
             ))
 
             po_id = cursor.lastrowid
@@ -4459,7 +4563,8 @@ def add_po():
             "grand_total": grand_total,
             "amount_words": amount_words,
             "apply_gst": apply_gst,
-            "apply_round_off": data.get("apply_round_off", False),   # ← add this
+            "apply_round_off": data.get("apply_round_off", False),
+            'esign_approved': False
         }
 
         for item in data['items']:
