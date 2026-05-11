@@ -32,7 +32,8 @@ import json   #new_import
 from openai import OpenAI  #new_import
 from urllib.parse import quote_plus
 #Imports for PO
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, KeepTogether
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, KeepTogether, Flowable
+from reportlab.platypus import Image as RLImage
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER
@@ -53,6 +54,30 @@ from reportlab.platypus import Frame
 from PIL import Image
 Image.MAX_IMAGE_PIXELS = None
 import io
+# For eSign i have to add code here
+class ESignImage(Flowable):
+    """Custom flowable that draws the esign image pinned to the left edge."""
+    def __init__(self, path, width=80, height=32):
+        super().__init__()
+        self.img_path = path
+        self.img_w = width
+        self.img_h = height
+
+    def wrap(self, availW, availH):
+        # Report EXACT image size — not availW — so table can't center it
+        return self.img_w, self.img_h
+
+    def draw(self):
+        # Canvas is already positioned at our flowable's origin (left edge of cell + padding)
+        # Drawing at (0,0) = exactly left-aligned, always
+        self.canv.drawImage(
+            self.img_path,
+            0, 0,
+            width=self.img_w,
+            height=self.img_h,
+            mask='auto'
+        )
+
 #-------------------------------New Security Update------------------------------------
 from functools import wraps
 from flask_login import LoginManager, login_user, logout_user, current_user, UserMixin, login_required
@@ -64,6 +89,7 @@ from flask import session
 from datetime import timedelta
 from flask_login import current_user
 import secrets
+import threading
 #-------------------------------Chatbot required imports------------------------------------
 load_dotenv()
 #-------------------------------WhatsApp Integration (DICE API)------------------------------------
@@ -731,25 +757,50 @@ def generate_po_pdf_flask(data):
         "6. Send all correspondence to: marketing@auxilo.com."
     )
 
-    # Build company details as simple text (no nested table grid)
-    company_text = (
-        f"<b>PAN No.</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {data.get('pan_no', 'AAXCS7051B')}<br/><br/><br/>"
-        f"<b>GSTI No</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: 27AAXCS7051B1Z2<br/><br/><br/>"
-        f"<b>Signature</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;:<br/><br/>"
-        + (f'<img src="static/signatures/dummy_esign_invoice_system.png" width="80" height="35"/><br/><br/>' if data.get('esign_approved') else "<br/><br/>")
-        + f"<b>Name</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: Benoy Joseph<br/>"
-        f"<b>Designation</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: Head – Marketing<br/><br/><br/>"
-        f"<b>Date</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: {data['date']}<br/><br/>"
-        f"<b>Place</b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: Mumbai"
+    if data.get('esign_approved'):
+        sig_path = os.path.join(os.path.dirname(__file__), 'static', 'signatures', 'dummy_esign_invoice_system.png')
+        sig_cell = Table(
+            [[Paragraph("<b>Signature</b>", normal_style), ESignImage(sig_path, width=90, height=36)]],
+            colWidths=[1.1 * inch, 1.85 * inch],
+        )
+        sig_cell.setStyle(TableStyle([
+            ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING',  (0, 0), (-1, -1), 0),
+            ('TOPPADDING',    (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+    else:
+        sig_cell = Paragraph("<b>Signature</b>", normal_style)
+
+    right_col_data = [
+        [Paragraph(f"<b>PAN No.</b>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;: {data.get('pan_no', 'AAXCS7051B')}", normal_style)],
+        [Paragraph("<b>GSTI No</b>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;: 27AAXCS7051B1Z2", normal_style)],
+        [sig_cell],
+        [Paragraph("<b>Name</b>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;: Benoy Joseph", normal_style)],
+        [Paragraph("<b>Designation</b>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;: Head \u2013 Marketing", normal_style)],
+        [Paragraph(f"<b>Date</b>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;: {data['date']}", normal_style)],
+        [Paragraph("<b>Place</b>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;: Mumbai", normal_style)],
+    ]
+
+    right_col_table = Table(
+        right_col_data,
+        colWidths=[3.0 * inch],
+        rowHeights=[None, None, None, None, None, None, None]
     )
-    
-    company_table = Paragraph(company_text, normal_style)
+    right_col_table.setStyle(TableStyle([
+        ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING',   (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING',  (0, 0), (-1, -1), 2),
+        ('TOPPADDING',    (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
 
     footer_row_index = len(all_rows)
     all_rows.append([
         Paragraph(terms, small_style),
         "", "", "",
-        company_table,
+        right_col_table,
         "", "", ""
     ])
 
@@ -1329,6 +1380,7 @@ def get_db_connection():
         logger.error(f"Connection error: {e}")
         # Fallback
         return mysql.connector.connect(**db_config)
+    
 def generate_po_number(vendor_name,po_date):
     """
     Generate PO number in format: FY25-26/(vendor_shortform)-(today_date)/(increment)
@@ -3602,39 +3654,7 @@ def esign_approve(po_id):
         WHERE id = %s
     """, (datetime.now(timezone.utc), current_user.name, po_id))
     conn.commit()
-
-    # Fetch PO data to regenerate PDF
-    cursor.execute("""
-        SELECT po.*, v.vendor_address
-        FROM invoices_v2.purchase_orders po
-        LEFT JOIN invoices_v2.vendors v ON po.vendor_id = v.id
-        WHERE po.id = %s
-    """, (po_id,))
-    po = cursor.fetchone()
-
-    cursor.execute("""
-        SELECT product_description as description, quantity as qty, rate
-        FROM invoices_v2.purchase_order_items WHERE po_id = %s
-    """, (po_id,))
-    items = cursor.fetchall()
     conn.close()
-
-    # Regenerate PDF with signature
-    pdf_data = {
-        "po_number": po['po_number'] or "N/A",
-        "date": po['po_date'].strftime('%d/%m/%Y') if po['po_date'] else date.today().strftime('%d/%m/%Y'),
-        "vendor_address": po['vendor_address'] or '',
-        "items": [{"description": i['description'], "qty": float(i['qty']), "rate": float(i['rate'])} for i in items],
-        "grand_total": float(po['grand_total']),
-        "amount_words": amount_to_words(float(po['grand_total'])),
-        "apply_gst": bool(po.get('apply_gst', True)),
-        "apply_round_off": bool(po.get('apply_round_off', False)),
-        "esign_approved": True,
-        "esign_responded_by": current_user.name,
-        "esign_responded_at": datetime.now().strftime('%d/%m/%Y'),
-    }
-
-    generate_po_pdf_flask(pdf_data)
     return jsonify({'success': True})
 
 @app.route('/po/esign/reject/<int:po_id>',methods = ['POST'])
@@ -3691,8 +3711,8 @@ def extract_name_from_email(email):
 @app.route('/vendor/approve/<int:request_id>', methods=['POST'])
 @login_required
 def approve_vendor_request(request_id):
-    """Superadmin approves vendor request"""
-    if current_user.role != 'superadmin':
+    """Superadmin and HOD approves vendor request"""
+    if current_user.role != 'superadmin' or current_user.role != 'hod':
         return jsonify({'success': False, 'message': 'Unauthorized'}), 403
     
     try:
@@ -4626,23 +4646,47 @@ def download_po_pdf(po_id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    cursor.execute(
-        'SELECT po_number, pdf_path FROM invoices_v2.purchase_orders WHERE id = %s',
-        (po_id,)
-    )
+    cursor.execute("""
+        SELECT po.*, v.vendor_address
+        FROM invoices_v2.purchase_orders po
+        LEFT JOIN invoices_v2.vendors v ON po.vendor_id = v.id
+        WHERE po.id = %s
+    """, (po_id,))
     po = cursor.fetchone()
-    conn.close()
 
     if not po:
+        conn.close()
         flash('Purchase Order not found')
         return redirect(url_for('po_list'))
 
-    pdf_path = po.get('pdf_path')
-
-    # If path not stored, try building from po_number
-    if not pdf_path and po.get('po_number'):
-        safe_name = po['po_number'].replace('/', '_')
-        pdf_path = f"generated_pdfs/{safe_name}.pdf"
+    # If esign approved, always regenerate PDF fresh so signature is guaranteed
+    if po.get('esign_status') == 'approved':
+        cursor.execute("""
+            SELECT product_description as description, quantity as qty, rate
+            FROM invoices_v2.purchase_order_items WHERE po_id = %s
+        """, (po_id,))
+        items = cursor.fetchall()
+        conn.close()
+        pdf_data = {
+            "po_number": po['po_number'] or "N/A",
+            "date": po['po_date'].strftime('%d/%m/%Y') if po['po_date'] else date.today().strftime('%d/%m/%Y'),
+            "vendor_address": po['vendor_address'] or '',
+            "items": [{"description": i['description'], "qty": float(i['qty']), "rate": float(i['rate'])} for i in items],
+            "grand_total": float(po['grand_total']),
+            "amount_words": amount_to_words(float(po['grand_total'])),
+            "apply_gst": bool(po.get('apply_gst', True)),
+            "apply_round_off": bool(po.get('apply_round_off', False)),
+            "esign_approved": True,
+            "esign_responded_by": po.get('esign_responded_by', ''),
+            "esign_responded_at": po['esign_responded_at'].strftime('%d/%m/%Y') if po.get('esign_responded_at') else date.today().strftime('%d/%m/%Y'),
+        }
+        pdf_path = generate_po_pdf_flask(pdf_data)
+    else:
+        conn.close()
+        pdf_path = po.get('pdf_path')
+        if not pdf_path and po.get('po_number'):
+            safe_name = po['po_number'].replace('/', '_')
+            pdf_path = f"generated_pdfs/{safe_name}.pdf"
 
     if not pdf_path or not os.path.exists(pdf_path):
         flash('PDF file not found')

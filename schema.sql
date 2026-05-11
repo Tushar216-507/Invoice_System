@@ -218,3 +218,7 @@ CREATE TABLE IF NOT EXISTS activity_of_po (
 
 INSERT IGNORE INTO departments (department_name)
 VALUES ('marketing');
+
+ALTER TABLE invoices_v2.purchase_orders
+ADD COLUMN esign_responded_at DATETIME NULL,
+ADD COLUMN esign_responded_by VARCHAR(100) NULL;

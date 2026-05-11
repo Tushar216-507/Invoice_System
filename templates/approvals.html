@@ -98,7 +98,7 @@
                                 <p class="mb-0"><strong>Requested At:</strong> {{ po.esign_requested_at }}</p>
                             </div>
                             <div class="col-md-4 text-end d-flex flex-column justify-content-center gap-2">
-                                <button class="btn btn-success btn-sm" onclick="approveEsign({{ po.id }})">
+                                <button class="btn btn-success btn-sm" onclick="approveEsign({{ po.id }}, this)">
                                     ✓ Approve eSign
                                 </button>
                                 <button class="btn btn-danger btn-sm" onclick="rejectEsign({{ po.id }})">
@@ -159,8 +159,11 @@
 <script src="{{ url_for('static', filename='js/approvals.js') }}"></script>
 
 <script>
-async function approveEsign(poId) {
+async function approveEsign(poId, btn) {
     if (!confirm('Approve eSign for this PO?')) return;
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Approving...';
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
     const res = await fetch(`/po/esign/approve/${poId}`, { 
         method: 'POST',
@@ -172,6 +175,8 @@ async function approveEsign(poId) {
         location.reload();
     } else {
         alert('Error: ' + data.message);
+        btn.disabled = false;
+        btn.innerHTML = original;
     }
 }
 
